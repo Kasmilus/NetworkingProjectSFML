@@ -1,25 +1,37 @@
 #include <SFML/Graphics.hpp>
-#include <Box2D\Box2D.h>
+
+#include "GameController.h"
 
 int main()
 {
-	sf::RenderWindow window(sf::VideoMode(200, 200), "Multiplayer Game");
-	sf::CircleShape shape(100.f);
-	shape.setFillColor(sf::Color::Green);
+	sf::RenderWindow window(sf::VideoMode(800, 600), "My window");
+	sf::Clock clock;
+
+	GameController game;
+	game.Init();
 
 	while (window.isOpen())
 	{
 		sf::Event event;
+
+		sf::Time deltaTime = clock.restart();
+		// Update game logic
+		bool run = game.Update(deltaTime.asSeconds());
+
+		// Rendering
+		window.clear(sf::Color::Black);
+		game.Render(window);
+		window.display();
+
 		while (window.pollEvent(event))
 		{
-			if (event.type == sf::Event::Closed)
+			// "close requested" event: we close the window
+			if (event.type == sf::Event::Closed || !run)
 				window.close();
 		}
-
-		window.clear();
-		window.draw(shape);
-		window.display();
 	}
+
+	game.CleanUp();
 
 	return 0;
 }

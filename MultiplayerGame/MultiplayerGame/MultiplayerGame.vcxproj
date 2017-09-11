@@ -194,7 +194,10 @@
     <ClCompile Include="..\include\Box2D\Dynamics\Joints\b2WeldJoint.cpp" />
     <ClCompile Include="..\include\Box2D\Dynamics\Joints\b2WheelJoint.cpp" />
     <ClCompile Include="..\include\Box2D\Rope\b2Rope.cpp" />
+    <ClCompile Include="GameController.cpp" />
+    <ClCompile Include="Input.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Timer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\Box2D\Box2D.h" />
@@ -244,6 +247,9 @@
     <ClInclude Include="..\include\Box2D\Dynamics\Joints\b2WeldJoint.h" />
     <ClInclude Include="..\include\Box2D\Dynamics\Joints\b2WheelJoint.h" />
     <ClInclude Include="..\include\Box2D\Rope\b2Rope.h" />
+    <ClInclude Include="GameController.h" />
+    <ClInclude Include="Input.h" />
+    <ClInclude Include="Timer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

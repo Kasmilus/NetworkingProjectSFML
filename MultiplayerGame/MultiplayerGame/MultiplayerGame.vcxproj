@@ -197,6 +197,7 @@
     <ClCompile Include="GameController.cpp" />
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="PhysicsObject.cpp" />
     <ClCompile Include="Timer.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -249,6 +250,7 @@
     <ClInclude Include="..\include\Box2D\Rope\b2Rope.h" />
     <ClInclude Include="GameController.h" />
     <ClInclude Include="Input.h" />
+    <ClInclude Include="PhysicsObject.h" />
     <ClInclude Include="Timer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

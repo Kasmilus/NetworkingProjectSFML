@@ -35,7 +35,7 @@ void Input::Update()
 		}
 		else if (horizontalInput < -0.1f)
 		{
-			horizontalInput += SENSITIVITY * deltaTime;
+			horizontalInput += GRAVITY * deltaTime;
 		}
 		else
 		{
@@ -68,7 +68,7 @@ void Input::Update()
 		}
 		else if (verticalInput < -0.1f)
 		{
-			verticalInput += SENSITIVITY * deltaTime;
+			verticalInput += GRAVITY * deltaTime;
 		}
 		else
 		{

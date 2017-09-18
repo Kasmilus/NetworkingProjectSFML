@@ -11,31 +11,43 @@ GameController::~GameController()
 {
 }
 
-void GameController::Init()
+void GameController::Init(sf::RenderWindow *window)
 {
+	//SFML
+	this->window = window;
 	// Physics
-	b2Vec2 gravity(0.0f, 1.0f);	physicsWorld = new b2World(gravity);
+	b2Vec2 gravity(0.0f, 0.0f);
+	physicsWorld = new b2World(gravity);
+	debugDraw = new SFMLDebugDraw(*window);
+	physicsWorld->SetDebugDraw(debugDraw);
+	debugDraw->SetFlags(b2Draw::e_shapeBit);
 	//contactListener = new ContactListener;
 	//physicsWorld->SetContactListener(contactListener);
 
 	// Create objects
-	testObj = new PhysicsObject(physicsWorld, true, 0, 0, 1, 1);
-	wall = new PhysicsObject(physicsWorld, false, 18, 28, 20, 1);
+	testObj = new Player(physicsWorld, true, -15, 50, 3, 3);
+	wall = new PhysicsObject(physicsWorld, false, 0, 10, 10, 10);
 
 	// Load textures
-	sf::Texture testTexture;
-	testObj->SetTexture("../resources/test.png");	// BAD SOLUTION, WHAT IF I WANT TO REUSE TEXTURE?
-	wall->SetTexture("../resources/test.png");
+	testTexture.loadFromFile("../resources/test.png");
+
+	// Assign textures
+	testObj->SetTexture(testTexture);
+	wall->SetTexture(testTexture);
 
 }
 
 void GameController::CleanUp()
 {
-	delete testObj;
+	// Objects
+	if (wall)
+		delete wall;
+	if (testObj)
+		delete testObj;
 }
 
 bool GameController::Update(float deltaTime)
-{	
+{
 
 	Timer::Instance().Update(deltaTime);
 	Input::Instance().Update();
@@ -56,8 +68,11 @@ bool GameController::Update(float deltaTime)
 	return true;
 }
 
-void GameController::Render(sf::RenderWindow &window)
+void GameController::Render()
 {
-	window.draw(*testObj->GetSprite());
-	window.draw(*wall->GetSprite());
+	//physicsWorld->DrawDebugData();
+	window->draw(*testObj->GetSprite());
+	window->draw(*wall->GetSprite());
+	physicsWorld->DrawDebugData();
+
 }

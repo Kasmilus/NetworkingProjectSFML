@@ -25,7 +25,7 @@ private:
 
 	// Control hor/vert input
 	const float SENSITIVITY = 0.4f;
-	const float GRAVITY = 0.8f;
+	const float GRAVITY = 10.f;
 
 	// Keys
 	bool spacePressed;

@@ -194,6 +194,8 @@
     <ClCompile Include="..\include\Box2D\Dynamics\Joints\b2WeldJoint.cpp" />
     <ClCompile Include="..\include\Box2D\Dynamics\Joints\b2WheelJoint.cpp" />
     <ClCompile Include="..\include\Box2D\Rope\b2Rope.cpp" />
+    <ClCompile Include="Player.cpp" />
+    <ClCompile Include="SFMLDebugDraw.cpp" />
     <ClCompile Include="GameController.cpp" />
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="main.cpp" />
@@ -248,6 +250,9 @@
     <ClInclude Include="..\include\Box2D\Dynamics\Joints\b2WeldJoint.h" />
     <ClInclude Include="..\include\Box2D\Dynamics\Joints\b2WheelJoint.h" />
     <ClInclude Include="..\include\Box2D\Rope\b2Rope.h" />
+    <ClInclude Include="Globals.h" />
+    <ClInclude Include="Player.h" />
+    <ClInclude Include="SFMLDebugDraw.h" />
     <ClInclude Include="GameController.h" />
     <ClInclude Include="Input.h" />
     <ClInclude Include="PhysicsObject.h" />

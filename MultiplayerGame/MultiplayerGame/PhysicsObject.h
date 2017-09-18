@@ -2,7 +2,9 @@
 
 #include <SFML/Graphics.hpp>
 #include <Box2D\Box2D.h>
-
+#include "Globals.h"
+#include "Input.h"
+#include "Timer.h"
 
 class PhysicsObject
 {
@@ -12,21 +14,21 @@ public:
 
 	virtual void Update();
 
-	void SetTexture(std::string filePath);
+	void SetTexture(sf::Texture& texture);
 
 	sf::Sprite* GetSprite() { return &sprite; }
 
-private:
+protected:
 	// Physics
 	b2World *physicsWorld;
 	b2Body* physicsBody;
 
-	const float PHYSICS_SCALE = 20.0f;
-
 	// Graphics
-	sf::Texture texture;
+	sf::Texture* texture;
 	sf::Sprite sprite;
 
+	//
 	void updatePosition();
+	void clampVelocity();
 };
 

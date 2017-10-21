@@ -13,14 +13,14 @@ void Input::Update()
 	float deltaTime = Timer::Instance().GetDeltaTime();
 
 	// Horizontal
-	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left))
+	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left) || sf::Keyboard::isKeyPressed(sf::Keyboard::A))
 	{
 		horizontalInput -= SENSITIVITY * deltaTime;
 		// Snap to 0 after changing dir
 		if (horizontalInput > 0)
 			horizontalInput = 0;
 	}
-	else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right))
+	else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right) || sf::Keyboard::isKeyPressed(sf::Keyboard::D))
 	{
 		horizontalInput += SENSITIVITY * deltaTime;
 		// Snap to 0 after changing dir
@@ -46,14 +46,14 @@ void Input::Update()
 	else if (horizontalInput < -1) horizontalInput = -1;
 
 	// Vertical
-	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down))
+	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down) || sf::Keyboard::isKeyPressed(sf::Keyboard::S))
 	{
 		verticalInput += SENSITIVITY * deltaTime;
 		// Snap to 0 after changing dir
 		if (verticalInput < 0)
 			verticalInput = 0;
 	}
-	else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up))
+	else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up) || sf::Keyboard::isKeyPressed(sf::Keyboard::W))
 	{
 		verticalInput -= SENSITIVITY * deltaTime;
 		// Snap to 0 after changing dir
@@ -80,15 +80,11 @@ void Input::Update()
 
 	// Space
 	spacePressedLastFrame = spacePressed;
-	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Space))
-	{
-		spacePressed = true;
-	}
-	else
-	{
-		spacePressed = false;
-	}
+	spacePressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Space);
 
+	// Debug draw
+	debugDrawDownLastFrame = debugDrawDown;
+	debugDrawDown = sf::Keyboard::isKeyPressed(sf::Keyboard::I);
 
 }
 

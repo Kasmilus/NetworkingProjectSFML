@@ -8,7 +8,7 @@
 #include "Timer.h"
 #include "PhysicsObject.h"
 #include "Player.h"
-
+#include "ContactListener.h"
 
 class GameController
 {
@@ -24,6 +24,7 @@ public:
 private:
 	// Physics
 	b2World* physicsWorld;
+	ContactListener* contactListener;
 	SFMLDebugDraw* debugDraw;	// debug drawing
 	const float PHYSICS_TIMESTEP = 1.0f / 60.0f;
 	const int VEL_ITERATIONS = 8;
@@ -34,11 +35,16 @@ private:
 	sf::Texture testTexture;
 
 	//Objects
+	PhysicsObject* player;
 	PhysicsObject* testObj;
 	PhysicsObject* wall;
 
 	//SFML
 	sf::RenderWindow *window;
+
+	// Flags
+
+	bool isDebugDrawOn;
 
 };
 

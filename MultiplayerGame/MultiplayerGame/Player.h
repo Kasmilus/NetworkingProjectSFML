@@ -31,6 +31,9 @@ private:
 	float attackCharge;
 	float throwPower;
 
+	//
+	float lastFrameRotation;
+
 	// References
 	PhysicsObject* heldObject;
 	std::list<PhysicsObject*> objectsInRange;

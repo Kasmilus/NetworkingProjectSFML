@@ -17,7 +17,7 @@ PhysicsObject::PhysicsObject(b2World* physicsWorld, bool isDynamic, float posX, 
 		bodyDef.type = b2_dynamicBody;
 	bodyDef.position.Set(posX, posY);
 	bodyDef.angularDamping = 0.2f;
-	bodyDef.linearDamping = 0.01f;
+	bodyDef.linearDamping = 0.015f + (sizeX/100);
 	physicsBody = physicsWorld->CreateBody(&bodyDef);
 	// Shape
 	b2PolygonShape dynamicBox;
@@ -27,7 +27,7 @@ PhysicsObject::PhysicsObject(b2World* physicsWorld, bool isDynamic, float posX, 
 	fixtureDef.shape = &dynamicBox;
 	fixtureDef.density = 0.0f;
 	if (isDynamic)
-		fixtureDef.density = 1.0f;
+		fixtureDef.density = 1.0f + (sizeX/5);
 	fixtureDef.friction = 1.0f;
 	fixtureDef.restitution = 1;
 	physicsBody->CreateFixture(&fixtureDef);
@@ -54,13 +54,22 @@ void PhysicsObject::PickedUp(PhysicsObject* player)
 {
 	physicsBody->SetLinearVelocity(b2Vec2_zero);
 
-	// Set position in front of the player later on
-	// ...
+	// Set position in front of the player
+	float rotation = player->GetPhysicsBody()->GetAngle();
+	b2Vec2 offset = b2Vec2(cos(rotation), sin(rotation));	// make vector from the rotation
+	offset *= 5;
+
+	physicsBody->SetTransform(player->GetPhysicsBody()->GetPosition() + offset, physicsBody->GetAngle());
 
 	// Setup joint
 	b2RevoluteJointDef jointDef;
-	jointDef.Initialize(player->GetPhysicsBody(), physicsBody, player->GetPhysicsBody()->GetPosition());
-	jointDef.collideConnected = true;	jointDef.lowerAngle = 3.14f;	jointDef.upperAngle = 3.14f;	jointDef.enableLimit = true;	grabJoint = (b2RevoluteJoint*)physicsWorld->CreateJoint(&jointDef);
+	jointDef.Initialize(player->GetPhysicsBody(), physicsBody, physicsBody->GetPosition());
+	jointDef.collideConnected = true;
+	jointDef.lowerAngle = 0;
+	jointDef.upperAngle = 0;
+	jointDef.enableLimit = true;
+	grabJoint = (b2RevoluteJoint*)physicsWorld->CreateJoint(&jointDef);
+
 
 }
 

@@ -1,5 +1,6 @@
 #include "Player.h"
-
+#include "SFML\System\Vector2.hpp"
+#include <math.h>  
 
 
 Player::Player(b2World* physicsWorld, bool isDynamic, float posX, float posY, float sizeX, float sizeY)
@@ -16,7 +17,7 @@ Player::Player(b2World* physicsWorld, bool isDynamic, float posX, float posY, fl
 
 	// Default values for variables
 	isHoldingObject = false;
-	throwPower = 100;
+	throwPower = 1000;
 	attackCharge = 0;
 }
 
@@ -61,8 +62,8 @@ void Player::Update()
 		// Charge attack
 		attackCharge += Timer::Instance().GetDeltaTime();
 
-		if (attackCharge > 1)
-			attackCharge = 1;
+		if (attackCharge > 3)
+			attackCharge = 3;
 	}
 
 	PhysicsObject::Update();
@@ -108,16 +109,37 @@ void Player::EndCollision(b2Fixture* coll, bool isTrigger)
 
 void Player::move()
 {
-	float speed = 0.7f;
+	float speed = 0.4f;
 	float horInput = Input::Instance().HorizontalInput();
 	if (horInput != 0)
 		horInput = horInput > 0 ? 1 : -1;
 	float verInput = Input::Instance().VerticalInput();
 	if (verInput != 0)
 		verInput = verInput > 0 ? 1 : -1;
+
+	// Don't allow moving vertically and horizontally and the same time
+	if (horInput != 0)
+		verInput = 0;
+
 	physicsBody->SetLinearVelocity(b2Vec2(horInput*speed, -verInput*speed));
 
 	physicsBody->SetAngularVelocity(0);
+
+	float newAngle = lastFrameRotation;
+	if (horInput > 0)
+		newAngle = 0;
+	else if (horInput < 0)
+		newAngle = 180;
+	else if (verInput > 0)
+		newAngle = 270;
+	else if (verInput < 0)
+		newAngle = 90;
+
+	if (lastFrameRotation != newAngle)
+	{
+		newAngle = newAngle / 180 * 3.14f;
+		physicsBody->SetTransform(physicsBody->GetPosition(), newAngle);
+	}
 }
 
 void Player::pickUpObject(PhysicsObject* objectToPickUp)

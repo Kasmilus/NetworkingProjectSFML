@@ -37,11 +37,20 @@ PhysicsObject::PhysicsObject(b2World* physicsWorld, bool isDynamic, float posX, 
 
 	// User data
 	physicsBody->SetUserData(this);
+
+	size = sizeX;
+	isMarkedForDestruction = false;
+	grabJoint = nullptr;
 }
 
 
 PhysicsObject::~PhysicsObject()
 {
+	if (physicsBody)
+	{
+		physicsWorld->DestroyBody(physicsBody);
+		physicsBody = 0;
+	}
 }
 
 void PhysicsObject::Update()
@@ -57,9 +66,9 @@ void PhysicsObject::PickedUp(PhysicsObject* player)
 	// Set position in front of the player
 	float rotation = player->GetPhysicsBody()->GetAngle();
 	b2Vec2 offset = b2Vec2(cos(rotation), sin(rotation));	// make vector from the rotation
-	offset *= 5;
+	offset *= (2+size/1.8f);
 
-	physicsBody->SetTransform(player->GetPhysicsBody()->GetPosition() + offset, physicsBody->GetAngle());
+	physicsBody->SetTransform(player->GetPhysicsBody()->GetPosition() + offset, 0);
 
 	// Setup joint
 	b2RevoluteJointDef jointDef;
@@ -77,6 +86,14 @@ void PhysicsObject::Throw(b2Vec2 force)
 {
 	physicsWorld->DestroyJoint(grabJoint);
 	physicsBody->ApplyForceToCenter(force, true);
+}
+
+void PhysicsObject::Drop()
+{
+	if (grabJoint)
+	{
+		physicsWorld->DestroyJoint(grabJoint);
+	}
 }
 
 void PhysicsObject::clampVelocity()
@@ -116,4 +133,9 @@ void PhysicsObject::updatePosition()
 	sprite.setPosition(sf::Vector2f(physicsBody->GetPosition().x, physicsBody->GetPosition().y));
 	float angle = physicsBody->GetAngle() * 180 / 3.14f;
 	sprite.setRotation(angle);
+}
+
+void PhysicsObject::Destroy()
+{
+	isMarkedForDestruction = true;
 }

@@ -16,11 +16,14 @@ public:
 	virtual void Update();
 	void PickedUp(PhysicsObject* player);
 	void Throw(b2Vec2 force);
+	void Drop();
 
 	// Getters/Setters
 	void SetTexture(sf::Texture& texture);
 	b2Body* GetPhysicsBody() { return physicsBody; }
 	sf::Sprite* GetSprite() { return &sprite; }
+	float GetSize() { return size; }
+	bool IsMarkedForDestruction() { return isMarkedForDestruction; }
 
 	// Collision calls
 	virtual void BeginCollision(b2Fixture* coll, bool isTrigger);
@@ -30,7 +33,7 @@ public:
 
 protected:
 	// Physics
-	b2World *physicsWorld;
+	b2World* physicsWorld;
 	b2Body* physicsBody;
 	b2RevoluteJoint* grabJoint;
 
@@ -38,9 +41,15 @@ protected:
 	sf::Texture* texture;
 	sf::Sprite sprite;
 
+	// Other
+	float size;
+	bool isMarkedForDestruction;
+
 	// Functions
 	void updatePosition();
 	void clampVelocity();
+	void Destroy();
+
 
 };
 

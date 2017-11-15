@@ -10,10 +10,12 @@ public:
 	~Player();
 
 	void Update() override;
+	void Hit();
 
 	// Collision calls
 	void BeginCollision(b2Fixture* coll, bool isTrigger) override;
 	void EndCollision(b2Fixture* coll, bool isTrigger) override;
+	bool canMove;
 
 private:
 	// Actions
@@ -35,6 +37,7 @@ private:
 	float lastFrameRotation;
 
 	// References
+	// ConnectedPlayerStruct possessingPlayer
 	PhysicsObject* heldObject;
 	std::list<PhysicsObject*> objectsInRange;
 	std::list<Player*> playersInRange;

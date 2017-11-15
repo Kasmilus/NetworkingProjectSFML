@@ -25,11 +25,38 @@ void GameController::Init(sf::RenderWindow *window)
 	debugDraw = new SFMLDebugDraw(*window);
 	physicsWorld->SetDebugDraw(debugDraw);
 	debugDraw->SetFlags(b2Draw::e_shapeBit);
-	//contactListener = new ContactListener;
-	//physicsWorld->SetContactListener(contactListener);
 
-	// Create objects
-	SpawnObjects();
+	// Text
+	numberOfPlayers = 4;
+	font.loadFromFile("../resources/BebasNeue.otf");
+	for (int i = 0; i < 4; ++i)
+	{
+		// Player name
+		playerNameText[i].setFont(font);
+		playerNameText[i].setString("P" + std::to_string(i + 1));
+		playerNameText[i].setCharacterSize(30);
+		playerNameText[i].setScale(0.2f, 0.2f);
+		playerNameText[i].setColor(sf::Color::Yellow);
+		playerNameText[i].setOrigin(playerNameText[i].getLocalBounds().left, playerNameText[i].getLocalBounds().top);
+		float viewWidth = window->getView().getSize().x;
+		playerNameText[i].setPosition(i * viewWidth/4 - viewWidth/2 + i * 5, 0);
+
+		// Player score
+		playerScoreText[i].setFont(font);
+		playerScoreText[i].setString(std::to_string(0));
+		playerScoreText[i].setCharacterSize(30);
+		playerScoreText[i].setScale(0.18f, 0.18f);
+		playerScoreText[i].setColor(sf::Color::White);
+		playerScoreText[i].setOrigin(playerScoreText[i].getLocalBounds().left, playerScoreText[i].getLocalBounds().top);
+		playerScoreText[i].setPosition(i * viewWidth / 4 - viewWidth / 2 + 8 + i * 5, 0);
+	}
+	// Big text
+	gameFinishedText.setFont(font);
+	gameFinishedText.setString("Waiting to start");
+	gameFinishedText.setCharacterSize(50);
+	gameFinishedText.setScale(0.2f, 0.2f);
+	gameFinishedText.setColor(sf::Color::Yellow);
+	gameFinishedText.setPosition(-window->getView().getSize().x/3, 50);
 
 	// Load textures
 	testTexture.loadFromFile("../resources/test.png");
@@ -38,31 +65,35 @@ void GameController::Init(sf::RenderWindow *window)
 	wallTexture.setRepeated(true);
 	crateTexture.loadFromFile("../resources/crate.png");
 
-	// Assign textures
-	player->SetTexture(playerTexture);
-	testObj->SetTexture(testTexture);
-	wall->SetTexture(wallTexture);
-	for (auto &crate : crateObjects)
-	{
-		crate->SetTexture(crateTexture);
-	}
-	for (auto &wall : wallObjects)
-	{
-		wall->SetTexture(crateTexture);
-	}
+	// Level generation
+	SpawnObjects();	
+	AssignTextures();
 
 	isDebugDrawOn = false;
+	isGameFinished = false;
 }
 
 void GameController::CleanUp()
 {
 	// Objects
 	if (wall)
+	{
 		delete wall;
-	if (player)
-		delete player;
+		wall = 0;
+	}
+
+	for (auto &player : playerControllersList)
+	{
+		if (player)
+			delete player;
+	}
+	playerControllersList.clear();
+
 	if (testObj)
+	{
 		delete testObj;
+		testObj = 0;
+	}
 
 	for (auto &crate : crateObjects)
 	{
@@ -75,11 +106,20 @@ void GameController::CleanUp()
 		delete wall;
 	}
 	wallObjects.clear();
+
+	delete physicsWorld;
 }
 
 void GameController::SpawnObjects()
 {
-	player = new Player(physicsWorld, true, -15, 50, 3, 3);
+	int playerStartPos[4][2]{ {-30, 15}, {-30, 75}, {30, 15}, {30, 75} };
+	for (int i = 0; i < numberOfPlayers; ++i)
+	{
+		Player* newPlayerController = new Player(physicsWorld, true, playerStartPos[i][0], playerStartPos[i][1], 3, 3);
+		if (i == 0)
+			newPlayerController->canMove = true;
+		playerControllersList.push_back(newPlayerController);
+	}
 	testObj = new PhysicsObject(physicsWorld, true, -10, 80, 3, 3);
 
 	// Walls
@@ -99,11 +139,63 @@ void GameController::SpawnObjects()
 		float size = 2.5f + (rand() % 10 + 1) / 5 * 2;
 		float posX = -50 + (rand() % 81 + 1);
 		float posY = (rand() % 80 + 1);
-		PhysicsObject* newCrate = new PhysicsObject(physicsWorld, true, posX, posY, size, size);
+		CrateObject* newCrate = new CrateObject(physicsWorld, true, posX, posY, size, size);
 		crateObjects.push_back(newCrate);
 
 		numberOfCrates--;
 	}
+}
+
+void GameController::AssignTextures()
+{
+	testObj->SetTexture(testTexture);
+	wall->SetTexture(wallTexture);
+	for (auto &player : playerControllersList)
+	{
+		player->SetTexture(playerTexture);
+	}
+	for (auto &crate : crateObjects)
+	{
+		crate->SetTexture(crateTexture);
+	}
+	for (auto &wall : wallObjects)
+	{
+		wall->SetTexture(crateTexture);
+	}
+}
+
+bool GameController::CheckWinningConditions()
+{
+	if (playerControllersList.size() == 1)
+	{
+		// Add point to that player
+		// ...
+		// Delete last player controller
+		delete playerControllersList.back();
+		playerControllersList.clear();
+		// Delete whole level
+		for (auto &crate : crateObjects)
+		{
+			delete crate;
+		}
+		crateObjects.clear();
+		for (auto &wall : wallObjects)
+		{
+			delete wall;
+		}
+		wallObjects.clear();
+
+		// Check if any player has 3 points
+		// if so print the winner(for all players) and ask if start new match(just on server)
+		// if not start new round:
+
+		SpawnObjects();
+		AssignTextures();
+
+		return true;
+	}
+	
+	return false;
 }
 
 bool GameController::Update(float deltaTime)
@@ -111,6 +203,12 @@ bool GameController::Update(float deltaTime)
 
 	Timer::Instance().Update(deltaTime);
 	Input::Instance().Update();
+
+	// Wait for server to start the game again
+	if (isGameFinished)
+	{
+		return true;
+	}
 
 	// Physics world
 	physicsWorld->Step(PHYSICS_TIMESTEP, VEL_ITERATIONS, POS_ITERATIONS);
@@ -126,13 +224,52 @@ bool GameController::Update(float deltaTime)
 		return false;
 	}
 
-	player->Update();
+	for (auto &player : playerControllersList)
+	{
+		player->Update();
+	}
 	testObj->Update();
 	wall->Update();
-	for (auto &crate : crateObjects)
+
+	if (crateObjects.size() > 0)
 	{
-		crate->Update();
+		for (std::vector<CrateObject*>::iterator crate = crateObjects.begin(); crate != crateObjects.end(); )
+		{
+			(*crate)->Update();
+			if ((*crate)->IsMarkedForDestruction())
+			{
+				delete *crate;
+				crate = crateObjects.erase(crate);
+			}
+			else
+			{
+				++crate;
+			}
+		}
 	}
+
+	if (playerControllersList.size() > 1)
+	{
+		for (std::vector<Player*>::iterator player = playerControllersList.begin(); player != playerControllersList.end(); )
+		{
+			if ((*player)->IsMarkedForDestruction())
+			{
+				delete (*player);
+				player = playerControllersList.erase(player);
+
+				if (CheckWinningConditions())
+				{
+					break;
+				}
+			}
+			else
+			{
+				++player;
+			}
+
+		}
+	}
+
 	for (auto &wall : wallObjects)
 	{
 		wall->Update();
@@ -143,8 +280,10 @@ bool GameController::Update(float deltaTime)
 
 void GameController::Render()
 {
-	//physicsWorld->DrawDebugData();
-	window->draw(*player->GetSprite());
+	for (auto &player : playerControllersList)
+	{
+		window->draw(*player->GetSprite());
+	}
 	window->draw(*testObj->GetSprite());
 	window->draw(*wall->GetSprite());
 
@@ -156,6 +295,20 @@ void GameController::Render()
 	{
 		window->draw(*wall->GetSprite());
 	}
+
+	// Text
+	for (int i = 0; i < numberOfPlayers; ++i)
+	{
+		window->draw(playerNameText[i]);
+		playerScoreText->setString(std::to_string(0));	// later get score from player objects
+		window->draw(playerScoreText[i]);
+	}
+
+	if (isGameFinished)
+	{
+		window->draw(gameFinishedText);
+	}
+
 	// Debug draw
 	if(isDebugDrawOn)
 		physicsWorld->DrawDebugData();

@@ -8,7 +8,7 @@ Player::Player(b2World* physicsWorld, bool isDynamic, float posX, float posY, fl
 {
 	// Add sensor fixture to detect objects to pick up, players to punch etc.
 	b2CircleShape shape;
-	shape.m_radius = sizeX * 2;
+	shape.m_radius = sizeX * 1.25f;
 	b2FixtureDef fixtureDef;
 	fixtureDef.shape = &shape;
 	fixtureDef.isSensor = true;
@@ -19,74 +19,141 @@ Player::Player(b2World* physicsWorld, bool isDynamic, float posX, float posY, fl
 	isHoldingObject = false;
 	throwPower = 1000;
 	attackCharge = 0;
+	canMove = false;
+
+	heldObject = nullptr;
 }
 
 
 Player::~Player()
 {
+	if (heldObject)
+	{
+		heldObject->Drop();
+		heldObject = 0;
+	}
+	objectsInRange.clear();
+	playersInRange.clear();
+
+	PhysicsObject::~PhysicsObject();
 }
 
 void Player::Update()
 {
-	move();
+	if (canMove)
+	{
+		move();
 
-	if (Input::Instance().IsSpaceDown())
-	{
-		if (!isHoldingObject)
-		{
-			PhysicsObject* objectToPickUp = getObjectInRange();
-			if (objectToPickUp != nullptr)
-			{
-				pickUpObject(objectToPickUp);
-			}
-		}
-	}
-	else if (Input::Instance().IsSpaceReleased())
-	{
-		if (isHoldingObject)
-		{
-			throwObject();
-		}
-		else
+		if (Input::Instance().IsSpaceDown())
 		{
 			Player* enemyPlayer = getPlayerInRange();
 			if (enemyPlayer != nullptr)
 			{
 				punchPlayer(enemyPlayer);
 			}
+			if (enemyPlayer == nullptr)
+			{
+				if (!isHoldingObject)
+				{
+					PhysicsObject* objectToPickUp = getObjectInRange();
+					if (objectToPickUp != nullptr)
+					{
+						pickUpObject(objectToPickUp);
+					}
+				}
+			}
+		}
+		else if (Input::Instance().IsSpaceReleased())
+		{
+			if (isHoldingObject)
+			{
+				throwObject();
+			}
+		}
+
+		if (Input::Instance().IsSpacePressed())
+		{
+			// Charge attack
+			attackCharge += Timer::Instance().GetDeltaTime();
+
+			if (attackCharge > 3)
+				attackCharge = 3;
 		}
 	}
 
-	if (Input::Instance().IsSpacePressed())
+	// Check if all pointers are valid
+	for (std::list<PhysicsObject*>::const_iterator obj = objectsInRange.begin(); obj != objectsInRange.end(); )
 	{
-		// Charge attack
-		attackCharge += Timer::Instance().GetDeltaTime();
-
-		if (attackCharge > 3)
-			attackCharge = 3;
+		if ((*obj)->IsMarkedForDestruction())
+		{
+			obj = objectsInRange.erase(obj);
+		}
+		else
+		{
+			++obj;
+		}
+	}
+	for (std::list<Player*>::const_iterator player = playersInRange.begin(); player != playersInRange.end(); )
+	{
+		if ((*player)->IsMarkedForDestruction())
+		{
+			player = playersInRange.erase(player);
+		}
+		else
+		{
+			++player;
+		}
 	}
 
 	PhysicsObject::Update();
 }
 
+void Player::Hit()
+{
+	Destroy();
+}
+
 void Player::BeginCollision(b2Fixture* coll, bool isTrigger)
 {
 	bool isDynamic = coll->GetBody()->GetType() == b2BodyType::b2_dynamicBody;
+	PhysicsObject* collObj = static_cast<PhysicsObject*>(coll->GetBody()->GetUserData());
+	Player* enemyPlayer = dynamic_cast<Player*>(collObj);
 
+	// Something is in trigger range
 	if (isTrigger && isDynamic)
 	{
-		PhysicsObject* collObj = static_cast<PhysicsObject*>(coll->GetBody()->GetUserData());
-		Player* enemyPlayer = dynamic_cast<Player*>(collObj);
+		// Enemy player which can be punched
 		if (enemyPlayer)
 		{
 			playersInRange.push_back(enemyPlayer);
 		}
+		// Box which can be picked up
 		if (collObj)
 		{
-			objectsInRange.push_back(collObj);
+			if (!enemyPlayer)
+			{
+				objectsInRange.push_back(collObj);
+			}
 		}
 	}
-	
+	else if (!isTrigger)
+	{
+		// Hit by box
+		if (collObj && !enemyPlayer && collObj != heldObject)
+		{
+			b2Vec2 objVelocity = collObj->GetPhysicsBody()->GetLinearVelocity();
+			if (objVelocity.Length() * collObj->GetSize() > 0.75f)
+			{
+				// Check if object is flying in players direction
+				b2Vec2 posDiff = physicsBody->GetPosition() - collObj->GetPhysicsBody()->GetPosition();
+				if (b2Dot(objVelocity, posDiff) > 0.6f)
+				{
+					Hit();
+				}
+			}
+		}
+	}
+
 }
 
 void Player::EndCollision(b2Fixture* coll, bool isTrigger)
@@ -155,11 +222,13 @@ void Player::throwObject()
 	dir.Normalize();
 	float power = throwPower * attackCharge;
 	heldObject->Throw(power * dir);
+	heldObject = nullptr;
 	isHoldingObject = false;
 }
 
 void Player::punchPlayer(Player* enemyPlayer)
 {
+	enemyPlayer->Hit();
 }
 
 PhysicsObject* Player::getObjectInRange()
@@ -168,11 +237,14 @@ PhysicsObject* Player::getObjectInRange()
 	float dist = 1000;	// Just a random large value which will be larger than any possible player catch range
 	for each (PhysicsObject* obj in objectsInRange)
 	{
-		float tempDist = b2Vec2(obj->GetPhysicsBody()->GetPosition() - physicsBody->GetPosition()).LengthSquared();
-		if (tempDist < dist)
+		if (obj && obj->GetPhysicsBody())
 		{
-			objectToReturn = obj;
-			dist = tempDist;
+			float tempDist = b2Vec2(obj->GetPhysicsBody()->GetPosition() - physicsBody->GetPosition()).LengthSquared();
+			if (tempDist < dist)
+			{
+				objectToReturn = obj;
+				dist = tempDist;
+			}
 		}
 	}
 
@@ -185,11 +257,14 @@ Player* Player::getPlayerInRange()
 	float dist = 1000;
 	for each (Player* p in playersInRange)
 	{
-		float tempDist = b2Vec2(p->GetPhysicsBody()->GetPosition() - physicsBody->GetPosition()).LengthSquared();
-		if (tempDist < dist)
+		if (p)
 		{
-			playerToReturn = p;
-			dist = tempDist;
+			float tempDist = b2Vec2(p->GetPhysicsBody()->GetPosition() - physicsBody->GetPosition()).LengthSquared();
+			if (tempDist < dist)
+			{
+				playerToReturn = p;
+				dist = tempDist;
+			}
 		}
 	}
 

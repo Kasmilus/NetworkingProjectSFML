@@ -10,6 +10,11 @@
 #include "Player.h"
 #include "ContactListener.h"
 #include <vector>
+#include "CrateObject.h"
+
+// Connected player struct
+// Player IP PORT
+// Points
 
 class GameController
 {
@@ -23,7 +28,9 @@ public:
 	void CleanUp();
 
 private:
-	void SpawnObjects();	// Creates level
+	void SpawnObjects();	// Randomly generates level with players
+	void AssignTextures();
+	bool CheckWinningConditions();	// Called after each player's death, returns true if round's finished
 
 private:
 	// Physics
@@ -34,6 +41,12 @@ private:
 	const int VEL_ITERATIONS = 8;
 	const int POS_ITERATIONS = 3;
 
+	// Text
+	sf::Font font;
+	sf::Text gameFinishedText;
+	sf::Text playerNameText[4];
+	sf::Text playerScoreText[4];
+
 	//Textures
 	sf::Texture testTexture;
 	sf::Texture playerTexture;
@@ -41,18 +54,21 @@ private:
 	sf::Texture crateTexture;
 
 	//Objects
-	PhysicsObject* player;
 	PhysicsObject* testObj;
 	PhysicsObject* wall;
-	std::vector<PhysicsObject*> crateObjects;
+	std::vector<CrateObject*> crateObjects;
 	std::vector<PhysicsObject*> wallObjects;
 
 	//SFML
 	sf::RenderWindow *window;
 
 	// Flags
-
 	bool isDebugDrawOn;
+	bool isGameFinished;
 
+	// Multiplayer
+	// vector<ConnectedPlayerStruct> playersList;
+	std::vector<Player*> playerControllersList;
+	int numberOfPlayers;
 };
 

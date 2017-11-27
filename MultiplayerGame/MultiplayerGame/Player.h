@@ -6,7 +6,7 @@ class Player :
 	public PhysicsObject
 {
 public:
-	Player(b2World* physicsWorld, bool isDynamic, float posX, float posY, float sizeX, float sizeY);
+	Player(b2World* physicsWorld, sf::Font* font, bool isDynamic, float posX, float posY, float sizeX, float sizeY);
 	~Player();
 
 	void Update() override;
@@ -15,7 +15,14 @@ public:
 	// Collision calls
 	void BeginCollision(b2Fixture* coll, bool isTrigger) override;
 	void EndCollision(b2Fixture* coll, bool isTrigger) override;
+
+	void ShowTaunt();
+
 	bool canMove;
+	float tauntTextTimer;
+
+	// Text
+	sf::Text tauntText;
 
 private:
 	// Actions

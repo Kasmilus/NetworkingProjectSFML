@@ -86,6 +86,9 @@ void Input::Update()
 	debugDrawDownLastFrame = debugDrawDown;
 	debugDrawDown = sf::Keyboard::isKeyPressed(sf::Keyboard::I);
 
+	// Taunt
+	tauntButtonDown = sf::Keyboard::isKeyPressed(sf::Keyboard::G);
+
 }
 
 bool Input::IsQuitPressed()

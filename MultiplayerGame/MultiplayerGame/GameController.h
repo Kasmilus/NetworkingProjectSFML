@@ -32,6 +32,9 @@ private:
 	void AssignTextures();
 	bool CheckWinningConditions();	// Called after each player's death, returns true if round's finished
 
+	void StartAsClient();
+	void StartAsServer();
+
 private:
 	// Physics
 	b2World* physicsWorld;
@@ -43,7 +46,8 @@ private:
 
 	// Text
 	sf::Font font;
-	sf::Text gameFinishedText;
+	sf::Text bigText;
+	sf::Text smallText;
 	sf::Text playerNameText[4];
 	sf::Text playerScoreText[4];
 
@@ -69,6 +73,6 @@ private:
 	// Multiplayer
 	// vector<ConnectedPlayerStruct> playersList;
 	std::vector<Player*> playerControllersList;
-	int numberOfPlayers;
+
 };
 

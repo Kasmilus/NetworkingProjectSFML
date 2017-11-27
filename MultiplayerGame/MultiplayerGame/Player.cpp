@@ -3,7 +3,7 @@
 #include <math.h>  
 
 
-Player::Player(b2World* physicsWorld, bool isDynamic, float posX, float posY, float sizeX, float sizeY)
+Player::Player(b2World* physicsWorld, sf::Font* font, bool isDynamic, float posX, float posY, float sizeX, float sizeY)
 	:PhysicsObject(physicsWorld, isDynamic, posX, posY, sizeX, sizeY)
 {
 	// Add sensor fixture to detect objects to pick up, players to punch etc.
@@ -14,6 +14,13 @@ Player::Player(b2World* physicsWorld, bool isDynamic, float posX, float posY, fl
 	fixtureDef.isSensor = true;
 	physicsBody->CreateFixture(&fixtureDef);
 
+	// Text
+	tauntText.setFont(*font);
+	tauntText.setString("");
+	tauntText.setCharacterSize(22);
+	tauntText.setScale(0.1f, 0.1f);
+	tauntText.setColor(sf::Color::Red);
+	tauntText.setPosition(posX, posY);
 
 	// Default values for variables
 	isHoldingObject = false;
@@ -79,6 +86,22 @@ void Player::Update()
 			if (attackCharge > 3)
 				attackCharge = 3;
 		}
+
+		if (Input::Instance().IsTauntButtonPressed() && tauntTextTimer <= -1.0f)
+		{
+			ShowTaunt();
+		}
+
+		if (tauntTextTimer < 0)
+		{
+			tauntText.setString("");
+		}
+		else
+		{
+			tauntText.setPosition(sprite.getPosition());
+		}
+		tauntTextTimer -= Timer::Instance().GetDeltaTime();
+
 	}
 
 	// Check if all pointers are valid
@@ -172,6 +195,12 @@ void Player::EndCollision(b2Fixture* coll, bool isTrigger)
 			objectsInRange.remove(collObj);
 		}
 	}
+}
+
+void Player::ShowTaunt()
+{
+	tauntText.setString("ALL YOUR BASE ARE BELONG TO US");
+	tauntTextTimer = 1.5f;
 }
 
 void Player::move()

@@ -17,6 +17,7 @@ public:
 	bool IsSpaceReleased() { return (!spacePressed && spacePressedLastFrame); }
 	bool IsQuitPressed();
 	bool IsDebugDrawDown() { return debugDrawDown && !debugDrawDownLastFrame; }
+	bool IsTauntButtonPressed() { return tauntButtonDown; }
 
 private:
 	Input() {}
@@ -33,6 +34,8 @@ private:
 	bool spacePressedLastFrame;
 	bool debugDrawDown;
 	bool debugDrawDownLastFrame;
+	bool tauntButtonDown;
+
 	float horizontalInput;
 	float verticalInput;
 };

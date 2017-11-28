@@ -36,6 +36,7 @@ protected:
 	b2World* physicsWorld;
 	b2Body* physicsBody;
 	b2RevoluteJoint* grabJoint;
+	const float MAX_VELOCITY = 10.0f;
 
 	// Graphics
 	sf::Texture* texture;

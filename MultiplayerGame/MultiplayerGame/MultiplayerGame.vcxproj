@@ -94,7 +94,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-audio-d.lib;sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>sfml-audio-d.lib;sfml-graphics-d.lib;sfml-window-d.lib;sfml-network-d.lib;sfml-system-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -194,6 +194,10 @@
     <ClCompile Include="..\include\Box2D\Dynamics\Joints\b2WeldJoint.cpp" />
     <ClCompile Include="..\include\Box2D\Dynamics\Joints\b2WheelJoint.cpp" />
     <ClCompile Include="..\include\Box2D\Rope\b2Rope.cpp" />
+    <ClCompile Include="ClientState.cpp" />
+    <ClCompile Include="ConnectionInfo.cpp" />
+    <ClCompile Include="ConnectionInfo_Client.cpp" />
+    <ClCompile Include="ConnectionInfo_Server.cpp" />
     <ClCompile Include="ContactListener.cpp" />
     <ClCompile Include="CrateObject.cpp" />
     <ClCompile Include="Player.cpp" />
@@ -202,6 +206,7 @@
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="PhysicsObject.cpp" />
+    <ClCompile Include="Log.cpp" />
     <ClCompile Include="Timer.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -252,9 +257,14 @@
     <ClInclude Include="..\include\Box2D\Dynamics\Joints\b2WeldJoint.h" />
     <ClInclude Include="..\include\Box2D\Dynamics\Joints\b2WheelJoint.h" />
     <ClInclude Include="..\include\Box2D\Rope\b2Rope.h" />
+    <ClInclude Include="ClientState.h" />
+    <ClInclude Include="ConnectionInfo.h" />
+    <ClInclude Include="ConnectionInfo_Client.h" />
+    <ClInclude Include="ConnectionInfo_Server.h" />
     <ClInclude Include="ContactListener.h" />
     <ClInclude Include="CrateObject.h" />
     <ClInclude Include="Globals.h" />
+    <ClInclude Include="Log.h" />
     <ClInclude Include="Player.h" />
     <ClInclude Include="SFMLDebugDraw.h" />
     <ClInclude Include="GameController.h" />

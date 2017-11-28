@@ -1,6 +1,7 @@
 #include "Player.h"
 #include "SFML\System\Vector2.hpp"
 #include <math.h>  
+#include "CrateObject.h"
 
 
 Player::Player(b2World* physicsWorld, sf::Font* font, bool isDynamic, float posX, float posY, float sizeX, float sizeY)
@@ -205,7 +206,7 @@ void Player::ShowTaunt()
 
 void Player::move()
 {
-	float speed = 0.4f;
+	float speed = 10.0f;
 	float horInput = Input::Instance().HorizontalInput();
 	if (horInput != 0)
 		horInput = horInput > 0 ? 1 : -1;
@@ -242,17 +243,22 @@ void Player::pickUpObject(PhysicsObject* objectToPickUp)
 {
 	objectToPickUp->PickedUp(this);
 	heldObject = objectToPickUp;
+	((CrateObject*)heldObject)->SetIsBeingHeld(true);
 	isHoldingObject = true;
 }
 
 void Player::throwObject()
 {
-	b2Vec2 dir = b2Vec2(heldObject->GetPhysicsBody()->GetPosition() - physicsBody->GetPosition());
-	dir.Normalize();
-	float power = throwPower * attackCharge;
-	heldObject->Throw(power * dir);
-	heldObject = nullptr;
-	isHoldingObject = false;
+	if (heldObject)
+	{
+		b2Vec2 dir = b2Vec2(heldObject->GetPhysicsBody()->GetPosition() - physicsBody->GetPosition());
+		dir.Normalize();
+		float power = throwPower * attackCharge;
+		heldObject->Throw(power * dir);
+		((CrateObject*)heldObject)->SetIsBeingHeld(false);
+		heldObject = nullptr;
+		isHoldingObject = false;
+	}
 }
 
 void Player::punchPlayer(Player* enemyPlayer)

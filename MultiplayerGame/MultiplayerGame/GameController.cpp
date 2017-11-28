@@ -15,8 +15,10 @@ void GameController::Init(sf::RenderWindow *window)
 {
 	// Random seed
 	srand(time(NULL));
+
 	//SFML
 	this->window = window;
+
 	// Physics
 	b2Vec2 gravity(0.0f, 0.0f);
 	physicsWorld = new b2World(gravity);
@@ -26,6 +28,9 @@ void GameController::Init(sf::RenderWindow *window)
 	physicsWorld->SetDebugDraw(debugDraw);
 	debugDraw->SetFlags(b2Draw::e_shapeBit);
 
+	// Networking
+	connectionInfoServer.PassClientStatesPointer(&clientStates);
+
 	// Text
 	font.loadFromFile("../resources/BebasNeue.otf");
 	for (int i = 0; i < 4; ++i)
@@ -34,33 +39,33 @@ void GameController::Init(sf::RenderWindow *window)
 		playerNameText[i].setFont(font);
 		playerNameText[i].setString("P" + std::to_string(i + 1));
 		playerNameText[i].setCharacterSize(30);
-		playerNameText[i].setScale(0.2f, 0.2f);
+		playerNameText[i].setScale(0.2f, -0.2f);
 		playerNameText[i].setColor(sf::Color::Yellow);
 		playerNameText[i].setOrigin(playerNameText[i].getLocalBounds().left, playerNameText[i].getLocalBounds().top);
 		float viewWidth = window->getView().getSize().x;
-		playerNameText[i].setPosition(i * viewWidth/4 - viewWidth/2 + i * 5, 0);
+		playerNameText[i].setPosition(i * viewWidth / 4 - viewWidth / 2 + i * 5, 4.5f);
 
 		// Player score
 		playerScoreText[i].setFont(font);
 		playerScoreText[i].setString(std::to_string(0));
 		playerScoreText[i].setCharacterSize(30);
-		playerScoreText[i].setScale(0.18f, 0.18f);
+		playerScoreText[i].setScale(0.18f, -0.18f);
 		playerScoreText[i].setColor(sf::Color::White);
 		playerScoreText[i].setOrigin(playerScoreText[i].getLocalBounds().left, playerScoreText[i].getLocalBounds().top);
-		playerScoreText[i].setPosition(i * viewWidth / 4 - viewWidth / 2 + 8 + i * 5, 0);
+		playerScoreText[i].setPosition(i * viewWidth / 4 - viewWidth / 2 + 8 + i * 5, 4);
 	}
 	// Big text
 	bigText.setFont(font);
 	bigText.setString("Waiting to start");
 	bigText.setCharacterSize(50);
-	bigText.setScale(0.2f, 0.2f);
+	bigText.setScale(0.2f, -0.2f);
 	bigText.setColor(sf::Color::Yellow);
-	bigText.setPosition(-window->getView().getSize().x/3 + 8, 50);
+	bigText.setPosition(-window->getView().getSize().x / 3 + 8, 50);
 	// Small text
 	smallText.setFont(font);
 	smallText.setString("Press A to start a server, D to join as a client.");
 	smallText.setCharacterSize(30);
-	smallText.setScale(0.15f, 0.15f);
+	smallText.setScale(0.15f, -0.15f);
 	smallText.setColor(sf::Color::White);
 	smallText.setPosition(-window->getView().getSize().x / 3, 40);
 
@@ -72,11 +77,12 @@ void GameController::Init(sf::RenderWindow *window)
 	crateTexture.loadFromFile("../resources/crate.png");
 
 	// Level generation
-	SpawnObjects();	
+	SpawnObjects();
 	AssignTextures();
 
 	isDebugDrawOn = false;
-	isGameFinished = true;
+	gameState = GameState::WaitingToChooseNetworkingType;
+	networkUpdateTimer = 0.0f;
 }
 
 void GameController::CleanUp()
@@ -200,39 +206,216 @@ bool GameController::CheckWinningConditions()
 
 		return true;
 	}
-	
+
 	return false;
 }
 
 void GameController::StartAsClient()
 {
-
-	isGameFinished = false;
+	myNetworkingType = NetworkingType::Client;
+	connectionInfoClient.BindUDPSocket();
+	sf::Packet handshakePacket = connectionInfoClient.CreateHandshakePacket();
+	connectionInfoClient.ConnectToServer();
+	gameState = GameState::WaitingToStart;
 }
 
 void GameController::StartAsServer()
 {
+	myNetworkingType = NetworkingType::Server;
+	connectionInfoServer.BindUDPSocket();
+	gameState = GameState::WaitingToStart;
+}
 
-	isGameFinished = false;
+void GameController::HandleClientConnection()
+{
+	sf::Packet receivedPacket;
+
+	ConnectionStatus status = connectionInfoClient.GetConnectionStatus();
+	switch (status) {
+	case ConnectionStatus::NoConnection:
+		// Try to connect with server
+		if (connectionInfoClient.ConnectToServer())
+		{
+			// Connected - say hello
+			receivedPacket = connectionInfoClient.CreateHandshakePacket();
+			connectionInfoClient.SendPacketTCP(receivedPacket);
+			LOG(INFO) << "Sending first message to the server.";
+		}
+		break;
+	case ConnectionStatus::ConnectionUnconfirmed:
+		// Connection was established but client is still waiting for confirmation
+
+		// Check if server accepted connection request
+		if (connectionInfoClient.ReceivePacketTCP(receivedPacket))
+		{
+			// Received confirmation packet
+			HandshakePacket handshakePacketInfo;
+			receivedPacket >> handshakePacketInfo;
+
+			// Check if server accepted this client
+			if (handshakePacketInfo.accepted)
+			{
+				connectionInfoClient.ConnectionWithServerAccepted();
+				LOG(INFO) << "Server accepted connection, waiting for game to start.";
+			}
+			else
+			{
+				// This should print some pretty message
+				// but to make things simple we're going to set state back to choosing between server/client
+				LOG(ERROR) << "Server didn't accept connection!";
+				connectionInfoClient.Disconnect();
+				gameState = GameState::WaitingToChooseNetworkingType;
+			}
+		}
+		break;
+	case ConnectionStatus::ConnectionConfirmed:
+		// Wait for "game start" message
+		if (connectionInfoClient.ReceivePacketTCP(receivedPacket))
+		{
+			// Unpack data
+			if (false)
+			{
+				LOG(INFO) << "Received game start message!";
+			}
+		}
+		break;
+	}
+}
+
+void GameController::HandleServerConnection()
+{
+	// Listen for connections, accepted clients will be added to clientStates
+	connectionInfoServer.ListenForConnections();
+	// On space press start the game
+	bool startTheGame = Input::Instance().IsSpacePressed();
+
+	for (int i = 0; i < clientStates.size(); ++i)
+	{
+		sf::Packet receivedPacket;
+		sf::Packet responsePacket;
+
+		ConnectionStatus connectionStatus = clientStates.at(i)->GetConnectionStatus();
+		switch (connectionStatus) {
+		case ConnectionStatus::NoConnection:
+			// This client was connected but isn't anymore
+			// Purpose of this class is to keep that information in case of reconnect but for now just throw it away, implement properly later!
+			LOG(WARNING) << "Removing disconnected player from the list!";
+			clientStates.erase(clientStates.begin() + i);
+			--i;
+			break;
+		case ConnectionStatus::ConnectionUnconfirmed:
+			if (connectionInfoServer.ReceivePacketTCP(responsePacket))
+			{
+				// Received confirmation packet
+				HandshakePacket handshakePacketInfo;
+				responsePacket >> handshakePacketInfo;
+				// Check if server can accept new player
+				if (clientStates.size() > NUMBER_OF_CLIENTS_MAX)
+				{
+					// Decline connection
+					responsePacket = connectionInfoServer.CreateHandshakePacket(false);
+					connectionInfoServer.CloseConnectionWithClient(i);
+					LOG(INFO) << "Max number of players connected, declining new connection attempt.";
+				}
+				else
+				{
+					// Accept connection
+					responsePacket = connectionInfoServer.CreateHandshakePacket(true);
+					connectionInfoServer.SendPacketTCP(responsePacket);
+					clientStates.at(i)->SetConnected();
+					LOG(INFO) << "Player with ID " << i << " joined the server.";
+				}
+			}
+
+			break;
+		case ConnectionStatus::ConnectionConfirmed:
+			if (startTheGame)
+			{
+				// Tell clients that game starts now
+				LOG(INFO) << "Game start message sent to player with ID " << i << ".";
+			}
+			break;
+		}
+	}
+
+	if (startTheGame)
+	{
+		gameState = GameState::InGame;
+	}
 }
 
 bool GameController::Update(float deltaTime)
 {
-
 	Timer::Instance().Update(deltaTime);
-	Input::Instance().Update();
+	networkUpdateTimer += deltaTime;
 
-	// Wait for server to start the game again
-	if (isGameFinished)
+	if (isWindowInFocus)
 	{
+		Input::Instance().Update();
+	}
+
+	switch (gameState)
+	{
+	case GameState::WaitingToChooseNetworkingType:
+		// Start as server/client
 		if (Input::Instance().HorizontalInput() > 0)	// Client
 			StartAsClient();
-		else if (Input::Instance().HorizontalInput() < 0)
+		else if (Input::Instance().HorizontalInput() < 0)	// Server
 			StartAsServer();
 
 		return true;
+		break;
+	case GameState::WaitingToStart:
+		// Not connected yet(client)/not started the game yet(server)
+		if (myNetworkingType == NetworkingType::Client)
+		{
+			// Establish connection with the server
+			HandleClientConnection();
+		}
+		else
+		{
+			// Accept player connections
+			HandleServerConnection();
+		}
+		return true;
+		break;
+	case GameState::InGame:
+		// Update game simulation
+		UpdateGame(deltaTime);
+		// Send update to client/server
+		if (networkUpdateTimer >= NETWORK_TIMESTEP)
+		{
+			networkUpdateTimer = 0.0f;
+			UpdateNetworking();
+		}
+		break;
+	case GameState::Finished:
+		if (myNetworkingType == NetworkingType::Server)
+		{
+			if (Input::Instance().IsSpacePressed())
+			{
+				//Restart the game
+			}
+		}
+		break;
 	}
 
+
+
+
+
+
+	// Quitting game
+	if (Input::Instance().IsQuitPressed())
+	{
+		return false;
+	}
+
+	return true;
+}
+
+void GameController::UpdateGame(float deltaTime)
+{
 	// Physics world
 	physicsWorld->Step(PHYSICS_TIMESTEP, VEL_ITERATIONS, POS_ITERATIONS);
 
@@ -241,19 +424,20 @@ bool GameController::Update(float deltaTime)
 	{
 		isDebugDrawOn = !isDebugDrawOn;
 	}
-	// Quitting game
-	if (Input::Instance().IsQuitPressed())
-	{
-		return false;
-	}
 
+	// Update objects
 	for (auto &player : playerControllersList)
 	{
 		player->Update();
 	}
 	testObj->Update();
 	wall->Update();
+	for (auto &wall : wallObjects)
+	{
+		wall->Update();
+	}
 
+	// Destroy marked objects
 	if (crateObjects.size() > 0)
 	{
 		for (std::vector<CrateObject*>::iterator crate = crateObjects.begin(); crate != crateObjects.end(); )
@@ -293,12 +477,12 @@ bool GameController::Update(float deltaTime)
 		}
 	}
 
-	for (auto &wall : wallObjects)
-	{
-		wall->Update();
-	}
 
-	return true;
+}
+
+void GameController::UpdateNetworking()
+{
+
 }
 
 void GameController::Render()
@@ -329,14 +513,14 @@ void GameController::Render()
 		window->draw(playerControllersList[i]->tauntText);
 	}
 
-	if (isGameFinished)
+	if (gameState != GameState::InGame)
 	{
 		window->draw(bigText);
 		window->draw(smallText);
 	}
 
 	// Debug draw
-	if(isDebugDrawOn)
+	if (isDebugDrawOn)
 		physicsWorld->DrawDebugData();
 
 }

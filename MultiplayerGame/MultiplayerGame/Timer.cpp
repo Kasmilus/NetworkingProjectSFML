@@ -1,6 +1,5 @@
 #include "Timer.h"
 
-
 Timer& Timer::Instance()
 {
 	static Timer instance;
@@ -15,4 +14,9 @@ void Timer::Update(float deltaTime)
 float Timer::GetDeltaTime()
 {
 	return deltaTime;
+}
+
+float Timer::GetSimulationTime()
+{
+	return clock->getElapsedTime().asSeconds();
 }

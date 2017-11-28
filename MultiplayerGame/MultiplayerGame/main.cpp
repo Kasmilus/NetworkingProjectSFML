@@ -1,25 +1,37 @@
 #include <SFML/Graphics.hpp>
 
 #include "GameController.h"
+#include "Timer.h"
+#include "Log.h"
 
 const float MAP_SIZE = 100;
 
+bool isWindowInFocus = true;
+
 int main()
 {
-	sf::RenderWindow window(sf::VideoMode(800, 600), "My window");
+	sf::RenderWindow window(sf::VideoMode(800, 600), "Multiplayer game");
+	window.setVerticalSyncEnabled(false);	// enforce the same update rate on all clients and server
+	window.setFramerateLimit(60);
 
 	sf::View view(sf::FloatRect(-MAP_SIZE/2, MAP_SIZE, MAP_SIZE, -MAP_SIZE));
 	window.setView(view);
-	sf::Clock clock;
+	sf::Clock clockDeltaTime;	// This time is restarted each frame
+	sf::Clock clockSimulationTime;	// This clock is never restarted
+	Timer::Instance().SetClock(clockSimulationTime);
 
 	GameController game;
 	game.Init(&window);
 
+
+	LOG(INFO) << "Started the game.";
+
 	while (window.isOpen())
 	{
+		
 		sf::Event event;
 		//view.move(1, 1);
-		sf::Time deltaTime = clock.restart();
+		sf::Time deltaTime = clockDeltaTime.restart();
 		// Update game logic
 		bool run = game.Update(deltaTime.asSeconds());
 
@@ -30,9 +42,20 @@ int main()
 
 		while (window.pollEvent(event))
 		{
-			// "close requested" event: we close the window
-			if (event.type == sf::Event::Closed || !run)
-				window.close();
+			// Check if window is active
+			if (event.type == sf::Event::GainedFocus) 
+				isWindowInFocus = true;
+			if (event.type == sf::Event::LostFocus) 
+				isWindowInFocus = false;
+
+			game.isWindowInFocus = isWindowInFocus;
+
+			if (isWindowInFocus)
+			{
+				// "close requested" event: we close the window
+				if (event.type == sf::Event::Closed || !run)
+					window.close();
+			}
 		}
 	}
 

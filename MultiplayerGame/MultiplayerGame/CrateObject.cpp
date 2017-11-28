@@ -15,16 +15,19 @@ CrateObject::~CrateObject()
 
 void CrateObject::BeginCollision(b2Fixture* coll, bool isTrigger)
 {
-	float v = physicsBody->GetLinearVelocity().Length();
-	float v2 = coll->GetBody()->GetLinearVelocity().Length();
-
-	if (v > 0.6f || v2 > 0.6f)
+	if (!isBeingHeld)
 	{
-		health--;
-		sprite.setColor(sf::Color(255 / maxHealth * health, 255 / maxHealth * health, 255 / maxHealth * health, 255));
-		if (health <= 0)
+		float v = physicsBody->GetLinearVelocity().Length();
+		float v2 = coll->GetBody()->GetLinearVelocity().Length();
+
+		if (v > 0.6f || v2 > 0.6f)
 		{
-			Destroy();
+			health--;
+			sprite.setColor(sf::Color(255 / maxHealth * health, 255 / maxHealth * health, 255 / maxHealth * health, 255));
+			if (health <= 0)
+			{
+				Destroy();
+			}
 		}
 	}
 }

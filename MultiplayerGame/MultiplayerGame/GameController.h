@@ -11,10 +11,11 @@
 #include "ContactListener.h"
 #include <vector>
 #include "CrateObject.h"
+#include "ConnectionInfo_Client.h"
+#include "ConnectionInfo_Server.h"
 
-// Connected player struct
-// Player IP PORT
-// Points
+enum GameState { WaitingToChooseNetworkingType, WaitingToStart, InGame, Finished};
+enum NetworkingType { Server, Client};
 
 class GameController
 {
@@ -28,14 +29,30 @@ public:
 	void CleanUp();
 
 private:
+	void UpdateGame(float deltaTime);
+	void UpdateNetworking();
+
 	void SpawnObjects();	// Randomly generates level with players
 	void AssignTextures();
 	bool CheckWinningConditions();	// Called after each player's death, returns true if round's finished
 
 	void StartAsClient();
 	void StartAsServer();
+	void HandleClientConnection();
+	void HandleServerConnection();
+
+public:
+	bool isWindowInFocus;
 
 private:
+	// Networking
+	const float NETWORK_TIMESTEP = 1.0f / 20.0f;	// Rate at which information is exchanged between cleints and server. Simulation update rate is set in main.cpp
+	float networkUpdateTimer;
+	NetworkingType myNetworkingType;
+	ConnectionInfo_Client connectionInfoClient;	// Used if this instance is client
+	ConnectionInfo_Server connectionInfoServer;	// used if this instance is server
+	std::vector<ClientState*> clientStates;	// Connected players game info
+
 	// Physics
 	b2World* physicsWorld;
 	ContactListener* contactListener;
@@ -68,11 +85,11 @@ private:
 
 	// Flags
 	bool isDebugDrawOn;
-	bool isGameFinished;
+	GameState gameState;
 
 	// Multiplayer
-	// vector<ConnectedPlayerStruct> playersList;
 	std::vector<Player*> playerControllersList;
+	const int NUMBER_OF_CLIENTS_MAX = 4;
 
 };
 

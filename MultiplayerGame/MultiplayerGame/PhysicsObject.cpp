@@ -17,7 +17,7 @@ PhysicsObject::PhysicsObject(b2World* physicsWorld, bool isDynamic, float posX, 
 		bodyDef.type = b2_dynamicBody;
 	bodyDef.position.Set(posX, posY);
 	bodyDef.angularDamping = 0.2f;
-	bodyDef.linearDamping = 0.015f + (sizeX/100);
+	bodyDef.linearDamping = 0.15f + (sizeX/10);
 	physicsBody = physicsWorld->CreateBody(&bodyDef);
 	// Shape
 	b2PolygonShape dynamicBox;
@@ -99,15 +99,14 @@ void PhysicsObject::Drop()
 void PhysicsObject::clampVelocity()
 {
 	b2Vec2 v = physicsBody->GetLinearVelocity();
-	float maxV = 1;
-	if (v.x > maxV)
-		v.x = maxV;
-	if (v.x < -maxV)
-		v.x = -maxV;
-	if (v.y > maxV)
-		v.y = maxV;
-	if (v.y < -maxV)
-		v.y = -maxV;
+	if (v.x > MAX_VELOCITY)
+		v.x = MAX_VELOCITY;
+	if (v.x < -MAX_VELOCITY)
+		v.x = -MAX_VELOCITY;
+	if (v.y > MAX_VELOCITY)
+		v.y = MAX_VELOCITY;
+	if (v.y < -MAX_VELOCITY)
+		v.y = -MAX_VELOCITY;
 	physicsBody->SetLinearVelocity(v);
 }
 

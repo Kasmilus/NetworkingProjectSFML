@@ -4,7 +4,6 @@
 
 ConnectionInfo_Server::ConnectionInfo_Server()
 {
-	myServerSocketTCP.setBlocking(false);
 	myServerSocketUDP.setBlocking(false);
 	myServerListenerTCP.setBlocking(false);
 	isListening = false;
@@ -13,14 +12,13 @@ ConnectionInfo_Server::ConnectionInfo_Server()
 
 ConnectionInfo_Server::~ConnectionInfo_Server()
 {
-	for (auto socket : connectedClientSockets)
+	/*for (auto socket : connectedClientSockets)
 	{
 		socket->disconnect();
 		delete socket;
-	}
+	}*/
 	connectedClientSockets.clear();
 
-	myServerSocketTCP.disconnect();
 	myServerSocketUDP.unbind();
 	myServerListenerTCP.close();
 }
@@ -47,19 +45,23 @@ bool ConnectionInfo_Server::ListenForConnections()
 		isListening = true;
 
 		// accept a new connection
-		sf::TcpSocket* client = new sf::TcpSocket();
+		connectedClientSockets.push_back(make_unique<sf::TcpSocket>());
+		std::unique_ptr<sf::TcpSocket>& client = connectedClientSockets.back();
 		sf::Socket::Status acceptStatus = myServerListenerTCP.accept(*client);
 		if (acceptStatus == sf::Socket::Done)
 		{
 			// Save that client socket
 			client->setBlocking(false);
-			connectedClientSockets.push_back(client);
 			// Save client info
 			ClientState* clientState = new ClientState(client->getRemoteAddress().toString());
 			clientStates->push_back(clientState);
 
-			LOG(INFO) << "Client with ID " << connectedClientSockets.size() << " connected.";
+			LOG(INFO) << "Client with ID " << connectedClientSockets.size()-1 << " connected.";
 			return true;
+		}
+		else
+		{
+			connectedClientSockets.pop_back();
 		}
 
 		if (acceptStatus != sf::Socket::NotReady)
@@ -80,22 +82,35 @@ bool ConnectionInfo_Server::ListenForConnections()
 	return true;
 }
 
-void ConnectionInfo_Server::CloseConnectionWithClient(short clientID)
+bool ConnectionInfo_Server::CheckIfClientDisconnected(sf::Socket::Status status, unsigned short clientID)
+{
+	if (status == sf::Socket::Status::Disconnected)
+	{
+		clientStates->at(clientID)->SetDisconnected();
+		connectedClientSockets.erase(connectedClientSockets.begin() + clientID);
+		LOG(WARNING) << "Client closed connection.";
+		return true;
+	}
+
+	return false;
+}
+
+void ConnectionInfo_Server::CloseConnectionWithClient(unsigned short clientID)
 {
 	connectedClientSockets.at(clientID)->disconnect();
 }
 
-bool ConnectionInfo_Server::SendPacketTCP(sf::Packet& packet, short receiverID)
+bool ConnectionInfo_Server::SendPacketTCP(sf::Packet& packet, unsigned short receiverID)
 {
 	// Check if ID is correct
 	if (receiverID >= connectedClientSockets.size())
 	{
-		LOG(ERROR) << "Client with that ID isn't connected! (invalid receiverID: " << receiverID << ".";
+		LOG(ERROR) << "Client with that ID isn't connected! (invalid receiverID: " << receiverID << ").";
 		return false;
 	}
-	else if (receiverID <= 0)
+	else if (receiverID < 0)
 	{
-		LOG(ERROR) << "Client ID can't be negative or zero! (invalid receiverID: " << receiverID << ".";
+		LOG(ERROR) << "Client ID can't be negati! (invalid receiverID: " << receiverID << ").";
 		return false;
 	}
 
@@ -110,17 +125,17 @@ bool ConnectionInfo_Server::SendPacketTCP(sf::Packet& packet, short receiverID)
 	return true;
 }
 
-bool ConnectionInfo_Server::SendPacketUDP(sf::Packet& packet, short receiverID)
+bool ConnectionInfo_Server::SendPacketUDP(sf::Packet& packet, unsigned short receiverID)
 {
 	// Check if ID is correct
 	if (receiverID >= connectedClientSockets.size())
 	{
-		LOG(ERROR) << "Client with that ID isn't connected! (invalid receiverID: " << receiverID << ".";
+		LOG(ERROR) << "Client with that ID isn't connected! (invalid receiverID: " << receiverID << ").";
 		return false;
 	}
-	else if (receiverID <= 0)
+	else if (receiverID < 0)
 	{
-		LOG(ERROR) << "Client ID can't be negative or zero! (invalid receiverID: " << receiverID << ".";
+		LOG(ERROR) << "Client ID can't be negative! (invalid receiverID: " << receiverID << ").";
 		return false;
 	}
 
@@ -139,9 +154,9 @@ bool ConnectionInfo_Server::SendPacketUDP(sf::Packet& packet, short receiverID)
 	return true;
 }
 
-bool ConnectionInfo_Server::ReceivePacketTCP(sf::Packet& packet)
+bool ConnectionInfo_Server::ReceivePacketTCP(sf::Packet& packet, unsigned short senderID)
 {
-	sf::Socket::Status status = myServerSocketTCP.receive(packet);
+	sf::Socket::Status status = connectedClientSockets.at(senderID)->receive(packet);
 	bool error = CheckForError(status, "Server receive packet (TCP) error.");
 	if (error)
 		return false;
@@ -155,7 +170,7 @@ bool ConnectionInfo_Server::ReceivePacketTCP(sf::Packet& packet)
 	return false;
 }
 
-bool ConnectionInfo_Server::ReceivePacketUDP(sf::Packet& packet, short senderID)
+bool ConnectionInfo_Server::ReceivePacketUDP(sf::Packet& packet, unsigned short senderID)
 {
 	// Check if ID is correct
 	if (senderID >= connectedClientSockets.size())
@@ -163,9 +178,9 @@ bool ConnectionInfo_Server::ReceivePacketUDP(sf::Packet& packet, short senderID)
 		LOG(ERROR) << "Client with that ID isn't connected! (invalid senderID: " << senderID << ".";
 		return false;
 	}
-	else if (senderID <= 0)
+	else if (senderID < 0)
 	{
-		LOG(ERROR) << "Client ID can't be negative or zero! (invalid senderID: " << senderID << ".";
+		LOG(ERROR) << "Client ID can't be negative! (invalid senderID: " << senderID << ".";
 		return false;
 	}
 
@@ -197,7 +212,7 @@ sf::Packet ConnectionInfo_Server::CreateHandshakePacket(bool acceptClient)
 	packetInfo.timestamp = Timer::Instance().GetSimulationTime();
 
 	// Write into the packet
-//	packet << packetInfo;
+	packet << packetInfo;
 
 	return packet;
 }

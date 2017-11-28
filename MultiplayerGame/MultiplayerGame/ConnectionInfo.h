@@ -13,7 +13,7 @@ Functions will return false if failed(not necessarily an error, sockets are in n
 */
 
 // When connection is unconfirmed it means player didn't hear back from server after sending first message
-enum ConnectionStatus { NoConnection, ConnectionUnconfirmed, ConnectionConfirmed};
+enum ConnectionStatus { NoConnection, Disconnected, ConnectionUnconfirmed, ConnectionConfirmed};
 
 // Clients will send ClientPacket and receive ServerPacket
 // Server will send ServerPacket and receive ClientPacket
@@ -82,11 +82,11 @@ public:
 
 	// These functions are mean't to be overridden by server and player
 	// ReceiverID - ID of the client who should receive the packet. Not relevant for client class(always sends to server)
-	virtual bool SendPacketTCP(sf::Packet &packet, short receiverID = 0) = 0;
-	virtual bool SendPacketUDP(sf::Packet &packet, short receiverID = 0) = 0;
+	virtual bool SendPacketTCP(sf::Packet &packet, unsigned short receiverID = 0) = 0;
+	virtual bool SendPacketUDP(sf::Packet &packet, unsigned short receiverID = 0) = 0;
 	// Fills given packet object if received data
-	virtual bool ReceivePacketTCP(sf::Packet& packet) = 0;
-	virtual bool ReceivePacketUDP(sf::Packet& packet, short senderID = 0) = 0;
+	virtual bool ReceivePacketTCP(sf::Packet& packet, unsigned short senderID = 0) = 0;
+	virtual bool ReceivePacketUDP(sf::Packet& packet, unsigned short senderID = 0) = 0;
 
 protected:
 	// Returns true if status is unexpected error or socket disconnected

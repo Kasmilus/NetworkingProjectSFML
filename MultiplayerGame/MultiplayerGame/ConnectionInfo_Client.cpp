@@ -46,9 +46,24 @@ bool ConnectionInfo_Client::ConnectToServer()
 	return true;
 }
 
-bool ConnectionInfo_Client::SendPacketTCP(sf::Packet& packet, short receiverID)
+bool ConnectionInfo_Client::CheckIfDisconnected(sf::Socket::Status status)
+{
+	if (status == sf::Socket::Status::Disconnected)
+	{
+		connectionStatus = ConnectionStatus::Disconnected;
+		LOG(WARNING) << "Server closed connection.";
+		return true;
+	}
+
+	return false;
+}
+
+bool ConnectionInfo_Client::SendPacketTCP(sf::Packet& packet, unsigned short receiverID)
 {
 	sf::Socket::Status status = MyClientSocketTCP.send(packet);
+	bool connectionBroken = CheckIfDisconnected(status);
+	if (connectionBroken)
+		return false;
 	bool error = CheckForError(status, "Client send packet (TCP) error.");
 	if (error)
 		return false;
@@ -58,9 +73,12 @@ bool ConnectionInfo_Client::SendPacketTCP(sf::Packet& packet, short receiverID)
 	return true;
 }
 
-bool ConnectionInfo_Client::SendPacketUDP(sf::Packet& packet, short receiverID)
+bool ConnectionInfo_Client::SendPacketUDP(sf::Packet& packet, unsigned short receiverID)
 {
 	sf::Socket::Status status = MyClientSocketUDP.send(packet, serverIP, serverPort);
+	bool connectionBroken = CheckIfDisconnected(status);	// UDP doesn't have to be connected but if there's no TCP connection, server won't receive UDP either
+	if (connectionBroken)
+		return false;
 	bool error = CheckForError(status, "Client send packet (UDP) error.");
 	if (error)
 		return false;
@@ -70,9 +88,12 @@ bool ConnectionInfo_Client::SendPacketUDP(sf::Packet& packet, short receiverID)
 	return true;
 }
 
-bool ConnectionInfo_Client::ReceivePacketTCP(sf::Packet& packet)
+bool ConnectionInfo_Client::ReceivePacketTCP(sf::Packet& packet, unsigned short senderID)
 {
 	sf::Socket::Status status = MyClientSocketTCP.receive(packet);
+	bool connectionBroken = CheckIfDisconnected(status);
+	if (connectionBroken)
+		return false;
 	bool error = CheckForError(status, "Client receive packet (TCP) error.");
 	if (error)
 		return false;
@@ -86,9 +107,12 @@ bool ConnectionInfo_Client::ReceivePacketTCP(sf::Packet& packet)
 	return false;
 }
 
-bool ConnectionInfo_Client::ReceivePacketUDP(sf::Packet& packet, short senderID)
+bool ConnectionInfo_Client::ReceivePacketUDP(sf::Packet& packet, unsigned short senderID)
 {
 	sf::Socket::Status status = MyClientSocketUDP.receive(packet, sf::IpAddress(serverIP), serverPort);
+	bool connectionBroken = CheckIfDisconnected(status);	// UDP doesn't have to be connected but if there's no TCP connection, server won't receive UDP either
+	if (connectionBroken)
+		return false;
 	bool error = CheckForError(status, "Client receive packet (UDP) error.");
 	if (error)
 		return false;
@@ -112,7 +136,7 @@ sf::Packet ConnectionInfo_Client::CreateHandshakePacket()
 	packetInfo.timestamp = Timer::Instance().GetSimulationTime();
 
 	// Write into the packet
-	//packet << packetInfo;
+	packet << packetInfo;
 
 	return packet;
 }
@@ -122,6 +146,7 @@ void ConnectionInfo_Client::Disconnect()
 	if (connectionStatus != ConnectionStatus::NoConnection)
 	{
 		MyClientSocketTCP.disconnect();
+		LOG(INFO) << "Disconnected from the server.";
 		connectionStatus = ConnectionStatus::NoConnection;
 	}
 }

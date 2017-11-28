@@ -1,6 +1,7 @@
 #pragma once
 #include "ConnectionInfo.h"
 #include <vector>
+#include <memory>
 #include "ClientState.h"
 
 /*
@@ -17,15 +18,16 @@ public:
 	inline void PassClientStatesPointer(std::vector<ClientState*>* clientStates) { this->clientStates = clientStates; }
 	bool BindUDPSocket();
 	bool ListenForConnections();
-	void CloseConnectionWithClient(short clientID);
+	void CloseConnectionWithClient(unsigned short clientID);
+	bool CheckIfClientDisconnected(sf::Socket::Status status, unsigned short clientID);
 
 	// These functions are mean't to be overridden by server and player
 	// ReceiverID - ID of the client who should receive the packet. Not relevant for client class(always sends to server)
-	virtual bool SendPacketTCP(sf::Packet& packet, short receiverID = 0) override;
-	virtual bool SendPacketUDP(sf::Packet& packet, short receiverID = 0) override;
+	virtual bool SendPacketTCP(sf::Packet& packet, unsigned short receiverID) override;
+	virtual bool SendPacketUDP(sf::Packet& packet, unsigned short receiverID) override;
 	// Fills given packet object if received data
-	virtual bool ReceivePacketTCP(sf::Packet& packet) override;
-	virtual bool ReceivePacketUDP(sf::Packet& packet, short senderID = 0) override;
+	virtual bool ReceivePacketTCP(sf::Packet& packet, unsigned short senderID) override;
+	virtual bool ReceivePacketUDP(sf::Packet& packet, unsigned short senderID) override;
 
 	// Create first packet to be sent after making connection
 	sf::Packet CreateHandshakePacket(bool acceptClient);
@@ -33,7 +35,6 @@ public:
 private:
 	// Server sockets
 	sf::TcpListener myServerListenerTCP;
-	sf::TcpSocket myServerSocketTCP;
 	sf::UdpSocket myServerSocketUDP;
 
 	// Listen
@@ -41,7 +42,7 @@ private:
 	bool isListening;
 
 	// Connected clients network info
-	std::vector<sf::TcpSocket*> connectedClientSockets;
+	std::vector<std::unique_ptr<sf::TcpSocket>> connectedClientSockets;
 
 	// Connected players game info
 	std::vector<ClientState*>* clientStates;

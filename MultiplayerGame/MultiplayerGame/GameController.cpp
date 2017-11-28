@@ -215,6 +215,7 @@ void GameController::StartAsClient()
 	myNetworkingType = NetworkingType::Client;
 	connectionInfoClient.BindUDPSocket();
 	sf::Packet handshakePacket = connectionInfoClient.CreateHandshakePacket();
+	LOG(INFO) << "Trying to connect with server.";
 	connectionInfoClient.ConnectToServer();
 	gameState = GameState::WaitingToStart;
 }
@@ -223,6 +224,7 @@ void GameController::StartAsServer()
 {
 	myNetworkingType = NetworkingType::Server;
 	connectionInfoServer.BindUDPSocket();
+	LOG(INFO) << "Server starts listening for connections.";
 	gameState = GameState::WaitingToStart;
 }
 
@@ -232,6 +234,10 @@ void GameController::HandleClientConnection()
 
 	ConnectionStatus status = connectionInfoClient.GetConnectionStatus();
 	switch (status) {
+	case ConnectionStatus::Disconnected:
+		// Client disconnected for some reason - go back to main screen
+		gameState = GameState::WaitingToChooseNetworkingType;
+		break;
 	case ConnectionStatus::NoConnection:
 		// Try to connect with server
 		if (connectionInfoClient.ConnectToServer())
@@ -263,6 +269,7 @@ void GameController::HandleClientConnection()
 				// This should print some pretty message
 				// but to make things simple we're going to set state back to choosing between server/client
 				LOG(ERROR) << "Server didn't accept connection!";
+
 				connectionInfoClient.Disconnect();
 				gameState = GameState::WaitingToChooseNetworkingType;
 			}
@@ -296,6 +303,11 @@ void GameController::HandleServerConnection()
 
 		ConnectionStatus connectionStatus = clientStates.at(i)->GetConnectionStatus();
 		switch (connectionStatus) {
+		case ConnectionStatus::Disconnected:
+			LOG(WARNING) << "Client disconnected.";
+			clientStates.erase(clientStates.begin() + i);
+			--i;
+			break;
 		case ConnectionStatus::NoConnection:
 			// This client was connected but isn't anymore
 			// Purpose of this class is to keep that information in case of reconnect but for now just throw it away, implement properly later!
@@ -304,11 +316,13 @@ void GameController::HandleServerConnection()
 			--i;
 			break;
 		case ConnectionStatus::ConnectionUnconfirmed:
-			if (connectionInfoServer.ReceivePacketTCP(responsePacket))
+			if (connectionInfoServer.ReceivePacketTCP(responsePacket, i))
 			{
 				// Received confirmation packet
 				HandshakePacket handshakePacketInfo;
 				responsePacket >> handshakePacketInfo;
+
+				LOG(INFO) << "Received first packet from client";
 				// Check if server can accept new player
 				if (clientStates.size() > NUMBER_OF_CLIENTS_MAX)
 				{
@@ -321,7 +335,7 @@ void GameController::HandleServerConnection()
 				{
 					// Accept connection
 					responsePacket = connectionInfoServer.CreateHandshakePacket(true);
-					connectionInfoServer.SendPacketTCP(responsePacket);
+					connectionInfoServer.SendPacketTCP(responsePacket, i);
 					clientStates.at(i)->SetConnected();
 					LOG(INFO) << "Player with ID " << i << " joined the server.";
 				}

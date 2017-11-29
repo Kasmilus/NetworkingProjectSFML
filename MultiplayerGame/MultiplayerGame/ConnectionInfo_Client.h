@@ -35,7 +35,6 @@ public:
 private:
 	ConnectionStatus connectionStatus;
 
-	unsigned short MyClientPort = 53111;
 	sf::UdpSocket MyClientSocketUDP;
 	sf::TcpSocket MyClientSocketTCP;
 

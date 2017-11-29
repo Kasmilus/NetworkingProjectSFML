@@ -5,7 +5,8 @@
 ConnectionInfo::ConnectionInfo()
 {
 	serverIP = "127.0.0.1";
-	serverPort = 5311;
+	serverPort = 5312;
+	ClientPortUDP = 53111;
 }
 
 

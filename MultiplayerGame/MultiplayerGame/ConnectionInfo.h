@@ -13,18 +13,40 @@ Functions will return false if failed(not necessarily an error, sockets are in n
 */
 
 // When connection is unconfirmed it means player didn't hear back from server after sending first message
-enum ConnectionStatus { NoConnection, Disconnected, ConnectionUnconfirmed, ConnectionConfirmed};
+enum ConnectionStatus { NoConnection, Disconnected, ConnectionUnconfirmed, ConnectionConfirmed };
+// Commands - these would ideally be specified somewhere else with appropirate descriptions
+enum ServerGameStateCommand : sf::Uint8 { Nothing, StartGame, EndRound, EndGame };
+enum ServerUpdateType : sf::Uint8 { Position, Destroy, PlayerCharacter };	// This update contains Position - position update, Destroy if object should be destroyed, playerCharacter - it is character this player controls
+enum ClientSimulationUpdate : sf::Uint8 { Nothingg, Death};	// Anything not related to player directly controlling character
+enum ClientActionCommand : sf::Uint8 { MoveUp, MoveDown, MoveLeft, MoveRight, PressActionButton };
 
-// Clients will send ClientPacket and receive ServerPacket
-// Server will send ServerPacket and receive ClientPacket
+
+// Client will send ClientPacket(and a number of ClientActionCommands) and receive ServerPacket(with a number of ServerUpdatePackets)
+// Server will send ServerPacket(with a number of ServerUpdatePackets) and receive ClientPacket(and a number of ClientActionCommands)
 struct ServerPacket
 {
-
+	float timestamp;
+	sf::Uint8 serverGameStateCommand;	// ServerGameStateCommand - Tell player any important information about game state
+	sf::Uint8 numberOfUpdates;	// Tell client how many ServerUpdatePackets it contains
+};
+struct ServerUpdatePacket
+{
+	sf::Uint8 objectID;	// Each object in the game has an ID so server can easily correct every part of simulation on client machine
+	sf::Uint8 updateType; // ServerUpdateType
+	// Fields meaning depends on type of update
+	float fieldOne;		// Position - x
+	float fieldTwo;		// Position - y
+	bool fieldThree;	// HoldingObject - yes/no; Death - yes/no(no as a response to invalid death message from the client); Is a player?(on game start)
+	float fieldFour;	// Object size(on game start)
 };
 struct ClientPacket
 {
-
+	float timestamp;
+	sf::Uint8 objectID;	// ID of object ClientSimulationUpdate will refer to
+	sf::Uint8 clientSimulationUpdate;	// ClientSimulationUpdate - That information is just so server can make more satisfying decision for players if it's possible. It may be ignored
+	sf::Uint8 numberOfCommands;
 };
+
 
 /*
 Handshake:
@@ -43,8 +65,9 @@ struct HandshakePacket
 };
 
 // Overload operators for easy (un)packing variables
+// --- Handshake --- //
 inline
-sf::Packet& operator <<(sf::Packet& packet, const HandshakePacket& handshake)
+sf::Packet& operator << (sf::Packet& packet, const HandshakePacket& handshake)
 {
 	return packet << handshake.accepted << handshake.timestamp;
 }
@@ -53,25 +76,37 @@ sf::Packet& operator >> (sf::Packet& packet, HandshakePacket& handshake)
 {
 	return packet >> handshake.accepted >> handshake.timestamp;
 }
+// --- Server packets --- //
 inline
-sf::Packet& operator <<(sf::Packet& packet, const ServerPacket& serverPacket)
+sf::Packet& operator << (sf::Packet& packet, const ServerPacket& serverPacket)
 {
-	return packet << 1;
+	return packet << serverPacket.timestamp << serverPacket.serverGameStateCommand << serverPacket.numberOfUpdates;
 }
 inline
 sf::Packet& operator >> (sf::Packet& packet, ServerPacket& serverPacket)
 {
-	return packet;
+	return packet >> serverPacket.timestamp >> serverPacket.serverGameStateCommand >> serverPacket.numberOfUpdates;
 }
 inline
-sf::Packet& operator <<(sf::Packet& packet, const ClientPacket& clientPacket)
+sf::Packet& operator << (sf::Packet& packet, const ServerUpdatePacket& serverUpdatePacket)
 {
-	return packet << 1;
+	return packet << serverUpdatePacket.objectID << serverUpdatePacket.updateType << serverUpdatePacket.fieldOne << serverUpdatePacket.fieldTwo << serverUpdatePacket.fieldThree << serverUpdatePacket.fieldFour;
+}
+inline
+sf::Packet& operator >> (sf::Packet& packet, ServerUpdatePacket& serverUpdatePacket)
+{
+	return packet >> serverUpdatePacket.objectID >> serverUpdatePacket.updateType >> serverUpdatePacket.fieldOne >> serverUpdatePacket.fieldTwo >> serverUpdatePacket.fieldThree >> serverUpdatePacket.fieldFour;
+}
+// --- Client packets --- //
+inline
+sf::Packet& operator << (sf::Packet& packet, const ClientPacket& clientPacket)
+{
+	return packet << clientPacket.timestamp << clientPacket.objectID << clientPacket.clientSimulationUpdate << clientPacket.numberOfCommands;
 }
 inline
 sf::Packet& operator >> (sf::Packet& packet, ClientPacket& clientPacket)
 {
-	return packet;
+	return packet >> clientPacket.timestamp >> clientPacket.objectID >> clientPacket.clientSimulationUpdate >> clientPacket.numberOfCommands;
 }
 
 class ConnectionInfo
@@ -95,6 +130,8 @@ protected:
 protected:
 	std::string serverIP;
 	unsigned short serverPort;
+	unsigned short ClientPortUDP;
+
 
 };
 

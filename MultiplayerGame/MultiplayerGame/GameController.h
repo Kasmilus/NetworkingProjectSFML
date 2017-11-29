@@ -29,29 +29,47 @@ public:
 	void CleanUp();
 
 private:
+	// Update - server
 	void UpdateGame(float deltaTime);
+	// Simulate - client
+	void SimulateGame(float deltaTime);
 	void UpdateNetworking();
 
-	void SpawnObjects();	// Randomly generates level with players
+	// Gameplay
+	void GenerateLevel();	// Randomly generates objects and players
+	void SpawnStaticLevel();	// Spawns walls, always at the same predefined positions
+	std::vector<ServerUpdatePacket> SpawnLevelForClient(sf::Packet packet, uint8 numberOfObjects);	// Spawns level from data given by server and returns that(unpacked) data so it can be stored as first game state snapshot
 	void AssignTextures();
 	bool CheckWinningConditions();	// Called after each player's death, returns true if round's finished
+	PhysicsObject* FindObjectByID(sf::Uint8 ID);
 
+	// Networking
 	void StartAsClient();
 	void StartAsServer();
 	void HandleClientConnection();
 	void HandleServerConnection();
+	void PackClientPacket(sf::Packet& packet);	// Client packing data to be sent to the server
+	void UnpackClientPacket(sf::Packet& packet, sf::Uint8 clientID);	// Server unpacking data received from client
+	void PackServerPacket(sf::Packet& packet, sf::Uint8 clientID, ServerGameStateCommand message = ServerGameStateCommand::Nothing);	// Server packing data to be sent to the client
+	void PackServerGameStateChanges(vector<ServerUpdatePacket>& updates);
+	void PackServerGameStartData(vector<ServerUpdatePacket>& updates, sf::Uint8 clientID);
+	ServerGameStateCommand UnpackServerPacket(sf::Packet& packet);	// Client unpacking data received from server
 
 public:
 	bool isWindowInFocus;
 
 private:
 	// Networking
-	const float NETWORK_TIMESTEP = 1.0f / 20.0f;	// Rate at which information is exchanged between cleints and server. Simulation update rate is set in main.cpp
+	const float NETWORK_TIMESTEP = 1.0f / 30.0f;	// Rate at which information is exchanged between cleints and server. Simulation update rate is set in main.cpp
 	float networkUpdateTimer;
 	NetworkingType myNetworkingType;
 	ConnectionInfo_Client connectionInfoClient;	// Used if this instance is client
 	ConnectionInfo_Server connectionInfoServer;	// used if this instance is server
 	std::vector<ClientState*> clientStates;	// Connected players game info
+	// For server:
+	std::vector<std::list<std::pair<float, std::vector<ClientActionCommand>>*>> clientCommandsHistory;	// Time and commands - Vector of players keeping list of pair entries (time, commands) with history of commands
+	// For client:
+	std::list<std::pair<float, std::vector<ServerUpdatePacket>>*> snapshots;	// Time and all object updates
 
 	// Physics
 	b2World* physicsWorld;
@@ -75,6 +93,7 @@ private:
 	sf::Texture crateTexture;
 
 	//Objects
+	uint8 numberOfSpawnedObjects;	// used to give IDs
 	PhysicsObject* testObj;
 	PhysicsObject* wall;
 	std::vector<CrateObject*> crateObjects;

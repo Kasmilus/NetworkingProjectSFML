@@ -11,6 +11,7 @@ public:
 
 	void Update() override;
 	void Hit();
+	inline int IsHoldingObject() { return heldObject != nullptr ? heldObject->GetID() : -1; }	// Returns (-1) if no object is held
 
 	// Collision calls
 	void BeginCollision(b2Fixture* coll, bool isTrigger) override;

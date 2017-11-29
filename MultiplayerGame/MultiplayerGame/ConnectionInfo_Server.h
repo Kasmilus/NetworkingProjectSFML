@@ -16,6 +16,7 @@ public:
 	~ConnectionInfo_Server();
 
 	inline void PassClientStatesPointer(std::vector<ClientState*>* clientStates) { this->clientStates = clientStates; }
+	inline int GetConnectedClientsNumber() { return connectedClientSockets.size(); }
 	bool BindUDPSocket();
 	bool ListenForConnections();
 	void CloseConnectionWithClient(unsigned short clientID);

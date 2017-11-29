@@ -23,7 +23,10 @@ public:
 	b2Body* GetPhysicsBody() { return physicsBody; }
 	sf::Sprite* GetSprite() { return &sprite; }
 	float GetSize() { return size; }
-	bool IsMarkedForDestruction() { return isMarkedForDestruction; }
+	inline bool IsMarkedForDestruction() { return isMarkedForDestruction; }
+	inline void Destroy() { isMarkedForDestruction = true; }	// Will destroy the object at the end of the frame
+	void SetID(sf::Uint8 value) { ID = value; }
+	sf::Uint8 GetID() { return ID; }
 
 	// Collision calls
 	virtual void BeginCollision(b2Fixture* coll, bool isTrigger);
@@ -32,6 +35,9 @@ public:
 	
 
 protected:
+	//ID
+	sf::Uint8 ID;
+
 	// Physics
 	b2World* physicsWorld;
 	b2Body* physicsBody;
@@ -49,7 +55,6 @@ protected:
 	// Functions
 	void updatePosition();
 	void clampVelocity();
-	void Destroy();
 
 
 };

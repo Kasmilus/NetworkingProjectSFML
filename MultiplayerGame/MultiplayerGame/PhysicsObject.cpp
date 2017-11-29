@@ -133,8 +133,3 @@ void PhysicsObject::updatePosition()
 	float angle = physicsBody->GetAngle() * 180 / 3.14f;
 	sprite.setRotation(angle);
 }
-
-void PhysicsObject::Destroy()
-{
-	isMarkedForDestruction = true;
-}

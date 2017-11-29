@@ -8,6 +8,7 @@ Timer& Timer::Instance()
 
 void Timer::Update(float deltaTime)
 {
+	timeSinceStart += deltaTime;
 	this->deltaTime = deltaTime;
 }
 
@@ -18,5 +19,5 @@ float Timer::GetDeltaTime()
 
 float Timer::GetSimulationTime()
 {
-	return clock->getElapsedTime().asSeconds();
+	return timeSinceStart;
 }

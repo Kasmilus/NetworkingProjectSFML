@@ -8,8 +8,6 @@ public:
 
 	void Update(float deltaTime);
 
-	inline void SetClock(sf::Clock clock) { this->clock = &clock; }
-
 	float GetDeltaTime();
 	float GetSimulationTime();	// Returns time since game start(in seconds)
 
@@ -18,7 +16,7 @@ private:
 	Timer(Timer const&);              // Don't Implement.
 	void operator=(Timer const&); // Don't implement
 
+	float timeSinceStart = 0.0f;
 	float deltaTime;
-	sf::Clock* clock;
 };
 

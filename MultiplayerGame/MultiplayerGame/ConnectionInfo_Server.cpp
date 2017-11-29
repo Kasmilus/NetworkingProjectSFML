@@ -32,6 +32,7 @@ bool ConnectionInfo_Server::BindUDPSocket()
 		return false;
 	}
 
+	LOG(INFO) << "Server UDP socket bound to port " << serverPort;
 	return true;
 }
 
@@ -140,8 +141,8 @@ bool ConnectionInfo_Server::SendPacketUDP(sf::Packet& packet, unsigned short rec
 	}
 
 	// Get client's IP and port
-	sf::IpAddress ip = connectedClientSockets.at(receiverID)->getRemoteAddress();
-	unsigned short port = connectedClientSockets.at(receiverID)->getRemotePort();
+	sf::IpAddress ip = serverIP;
+	unsigned short port = ClientPortUDP;
 
 	// Send packet
 	sf::Socket::Status status = myServerSocketUDP.send(packet, ip, port);
@@ -185,8 +186,8 @@ bool ConnectionInfo_Server::ReceivePacketUDP(sf::Packet& packet, unsigned short 
 	}
 
 	// Get client's IP and port
-	sf::IpAddress ip = connectedClientSockets.at(senderID)->getRemoteAddress();
-	unsigned short port = connectedClientSockets.at(senderID)->getRemotePort();
+	sf::IpAddress ip;
+	unsigned short port;
 
 	sf::Socket::Status status = myServerSocketUDP.receive(packet, ip, port);
 	bool error = CheckForError(status, "Server receive packet (UDP) error.");

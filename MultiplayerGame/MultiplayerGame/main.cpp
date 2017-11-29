@@ -17,14 +17,11 @@ int main()
 	sf::View view(sf::FloatRect(-MAP_SIZE/2, MAP_SIZE, MAP_SIZE, -MAP_SIZE));
 	window.setView(view);
 	sf::Clock clockDeltaTime;	// This time is restarted each frame
-	sf::Clock clockSimulationTime;	// This clock is never restarted
-	Timer::Instance().SetClock(clockSimulationTime);
 
 	GameController game;
 	game.Init(&window);
 
-
-	LOG(INFO) << "Started the game.";
+	LOG(INFO, INGAME) << "Started the game.";
 
 	while (window.isOpen())
 	{

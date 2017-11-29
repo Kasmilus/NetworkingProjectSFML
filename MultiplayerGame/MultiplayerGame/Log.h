@@ -24,10 +24,15 @@ enum typelog {
 	ERROR
 };
 
+enum msgtype {
+	NETWORK,
+	INGAME
+};
+
 class LOG {
 public:
 	LOG() {}
-	LOG(typelog type) {
+	LOG(typelog type, msgtype t = NETWORK) {
 		if(type == typelog::ERROR)
 			SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED);	// Red
 		else if(type == typelog::WARNING)
@@ -35,7 +40,7 @@ public:
 		else
 			SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);	// White
 		msglevel = type;
-		operator << ("[" + getLabel(type) + "] - " + getCurrentTime());
+		operator << ("[" + getLabel(t) + " - " + getLabel(type) + "] - " + getCurrentTime());
 
 	}
 	~LOG() {
@@ -61,6 +66,14 @@ private:
 		case INFO:  label = "INFO"; break;
 		case WARNING:  label = "WARNING"; break;
 		case ERROR: label = "ERROR"; break;
+		}
+		return label;
+	}
+	inline string getLabel(msgtype type) {
+		string label;
+		switch (type) {
+		case NETWORK: label = "NETWORK"; break;
+		case INGAME:  label = "IN-GAME"; break;
 		}
 		return label;
 	}

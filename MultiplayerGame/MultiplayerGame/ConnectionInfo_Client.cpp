@@ -18,13 +18,14 @@ ConnectionInfo_Client::~ConnectionInfo_Client()
 
 bool ConnectionInfo_Client::BindUDPSocket()
 {
-	sf::Socket::Status status = MyClientSocketUDP.bind(MyClientPort);
+	sf::Socket::Status status = MyClientSocketUDP.bind(ClientPortUDP);
 	if (status != sf::Socket::Done)
 	{
 		LOG(ERROR) << "Socket binding error.";
 		return false;
 	}
 
+	LOG(INFO) << "Client UDP socket bound to port " << ClientPortUDP;
 	return true;
 }
 
@@ -109,7 +110,9 @@ bool ConnectionInfo_Client::ReceivePacketTCP(sf::Packet& packet, unsigned short 
 
 bool ConnectionInfo_Client::ReceivePacketUDP(sf::Packet& packet, unsigned short senderID)
 {
-	sf::Socket::Status status = MyClientSocketUDP.receive(packet, sf::IpAddress(serverIP), serverPort);
+	sf::IpAddress tempIP;
+	unsigned short tempPort;
+	sf::Socket::Status status = MyClientSocketUDP.receive(packet, sf::IpAddress(tempIP), tempPort);
 	bool connectionBroken = CheckIfDisconnected(status);	// UDP doesn't have to be connected but if there's no TCP connection, server won't receive UDP either
 	if (connectionBroken)
 		return false;

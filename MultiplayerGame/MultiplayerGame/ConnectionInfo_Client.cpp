@@ -18,14 +18,14 @@ ConnectionInfo_Client::~ConnectionInfo_Client()
 
 bool ConnectionInfo_Client::BindUDPSocket()
 {
-	sf::Socket::Status status = MyClientSocketUDP.bind(ClientPortUDP);
+	sf::Socket::Status status = MyClientSocketUDP.bind(sf::Socket::AnyPort);
 	if (status != sf::Socket::Done)
 	{
 		LOG(ERROR) << "Socket binding error.";
 		return false;
 	}
 
-	LOG(INFO) << "Client UDP socket bound to port " << ClientPortUDP;
+	LOG(INFO) << "Client UDP socket bound to port " << MyClientSocketUDP.getLocalPort();
 	return true;
 }
 
@@ -108,7 +108,7 @@ bool ConnectionInfo_Client::ReceivePacketTCP(sf::Packet& packet, unsigned short 
 	return false;
 }
 
-bool ConnectionInfo_Client::ReceivePacketUDP(sf::Packet& packet, unsigned short senderID)
+bool ConnectionInfo_Client::ReceivePacketUDP(sf::Packet& packet, unsigned short& senderID)
 {
 	sf::IpAddress tempIP;
 	unsigned short tempPort;
@@ -137,6 +137,7 @@ sf::Packet ConnectionInfo_Client::CreateHandshakePacket()
 	HandshakePacket packetInfo;
 	packetInfo.accepted = true;
 	packetInfo.timestamp = Timer::Instance().GetSimulationTime();
+	packetInfo.clientPort = MyClientSocketUDP.getLocalPort();
 
 	// Write into the packet
 	packet << packetInfo;

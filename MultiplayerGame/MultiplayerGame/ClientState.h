@@ -20,6 +20,8 @@ public:
 	inline ConnectionStatus GetConnectionStatus() { return connectionStatus; }
 	inline void SetConnected() { connectionStatus = ConnectionStatus::ConnectionConfirmed; }
 	inline void SetDisconnected() { connectionStatus = ConnectionStatus::NoConnection; }
+	inline void SetSimulationStartTime(float t) { simulationStartTime = t; }
+	inline float GetSimulationStartTime() { return simulationStartTime; }
 
 	// Game related info
 	inline void AddPoint() { points++; }

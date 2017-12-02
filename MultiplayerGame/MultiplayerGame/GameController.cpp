@@ -30,6 +30,7 @@ void GameController::Init(sf::RenderWindow *window)
 
 	// Networking
 	connectionInfoServer.PassClientStatesPointer(&clientStates);
+	networkingUpdates = 0;
 
 	// Text
 	font.loadFromFile("../resources/BebasNeue.otf");
@@ -60,14 +61,16 @@ void GameController::Init(sf::RenderWindow *window)
 	bigText.setCharacterSize(50);
 	bigText.setScale(0.2f, -0.2f);
 	bigText.setColor(sf::Color::Yellow);
-	bigText.setPosition(-window->getView().getSize().x / 3 + 8, 50);
+	bigText.setOrigin(bigText.getLocalBounds().left + bigText.getLocalBounds().width / 2, bigText.getLocalBounds().top - bigText.getLocalBounds().height / 2);
+	bigText.setPosition(0, 55);
 	// Small text
 	smallText.setFont(font);
 	smallText.setString("Press A to start a server, D to join as a client.");
 	smallText.setCharacterSize(30);
 	smallText.setScale(0.15f, -0.15f);
 	smallText.setColor(sf::Color::White);
-	smallText.setPosition(-window->getView().getSize().x / 3, 40);
+	smallText.setOrigin(smallText.getLocalBounds().left + smallText.getLocalBounds().width / 2, smallText.getLocalBounds().top - smallText.getLocalBounds().height / 2);
+	smallText.setPosition(0, 40);
 
 	// Load textures
 	testTexture.loadFromFile("../resources/test.png");
@@ -76,7 +79,6 @@ void GameController::Init(sf::RenderWindow *window)
 	wallTexture.setRepeated(true);
 	crateTexture.loadFromFile("../resources/crate.png");
 
-	testObj = nullptr;
 	wall = nullptr;
 
 	isDebugDrawOn = false;
@@ -99,12 +101,6 @@ void GameController::CleanUp()
 			delete player;
 	}
 	playerControllersList.clear();
-
-	if (testObj)
-	{
-		delete testObj;
-		testObj = 0;
-	}
 
 	for (auto &crate : crateObjects)
 	{
@@ -132,11 +128,13 @@ void GameController::GenerateLevel()
 		newPlayerController->SetID(numberOfSpawnedObjects);
 		if (i == 0)
 			newPlayerController->canMove = true;
+		newPlayerController->SetAsServerObject();
+		newPlayerController->SetOwningClient(i);
 		playerControllersList.push_back(newPlayerController);
 		numberOfSpawnedObjects++;
 	}
 
-	SpawnStaticLevel();
+	SpawnStaticLevel(true);
 
 	// Generate number between 15-30
 	int numberOfCrates = rand() % 15 + 1 + 15;
@@ -149,6 +147,7 @@ void GameController::GenerateLevel()
 		float posY = (rand() % 80 + 1);
 		CrateObject* newCrate = new CrateObject(physicsWorld, true, posX, posY, size, size);
 		newCrate->SetID(numberOfSpawnedObjects);
+		newCrate->SetAsServerObject();
 		crateObjects.push_back(newCrate);
 
 		numberOfSpawnedObjects++;
@@ -158,23 +157,29 @@ void GameController::GenerateLevel()
 	AssignTextures();
 }
 
-void GameController::SpawnStaticLevel()
+void GameController::SpawnStaticLevel(bool onServer)
 {
-	testObj = new PhysicsObject(physicsWorld, true, -10, 80, 3, 3);
-	testObj->SetID(numberOfSpawnedObjects);
-	numberOfSpawnedObjects++;
-
 	// Walls
 	wall = new PhysicsObject(physicsWorld, false, 0, 30, 5, 60);
+	if (onServer)
+		wall->SetAsServerObject();
 	wallObjects.push_back(new PhysicsObject(physicsWorld, false, -50, 50, 5, 100));
 	wallObjects.push_back(new PhysicsObject(physicsWorld, false, 50, 50, 5, 100));
 	wallObjects.push_back(new PhysicsObject(physicsWorld, false, 0, 0, 100, 5));
 	wallObjects.push_back(new PhysicsObject(physicsWorld, false, 0, 100, 100, 5));
+
+	if (onServer)
+	{
+		for each (auto& w in wallObjects)
+		{
+			w->SetAsServerObject();
+		}
+	}
 }
 
 std::vector<ServerUpdatePacket> GameController::SpawnLevelForClient(sf::Packet packet, uint8 numberOfObjects)
 {
-	SpawnStaticLevel();
+	SpawnStaticLevel(false);
 
 	// Unpack the data
 	std::vector<ServerUpdatePacket> updates;
@@ -189,15 +194,16 @@ std::vector<ServerUpdatePacket> GameController::SpawnLevelForClient(sf::Packet p
 	{
 		ServerUpdateType updateType = (ServerUpdateType)updatePacket.updateType;
 		int id = updatePacket.objectID;
-		bool isPlayer = updatePacket.fieldThree;
-		float posX = updatePacket.fieldOne;
-		float posY = updatePacket.fieldTwo;
-		float size = updatePacket.fieldFour;
+		bool isPlayer = updatePacket.boolField;
+		float posX = ExpandToFloat(updatePacket.positionX);
+		float posY = ExpandToFloat(updatePacket.positionY);
+		float size = updatePacket.size;
 		if (updateType == ServerUpdateType::PlayerCharacter)
 		{
 			Player* newPlayerController = new Player(physicsWorld, &font, true, posX, posY, 3, 3);
 			newPlayerController->SetID(id);
 			newPlayerController->canMove = true;
+			myClientID = id;
 			playerControllersList.push_back(newPlayerController);
 		}
 		else
@@ -224,7 +230,6 @@ std::vector<ServerUpdatePacket> GameController::SpawnLevelForClient(sf::Packet p
 
 void GameController::AssignTextures()
 {
-	testObj->SetTexture(testTexture);
 	wall->SetTexture(wallTexture);
 	for (auto &player : playerControllersList)
 	{
@@ -245,7 +250,8 @@ bool GameController::CheckWinningConditions()
 	if (playerControllersList.size() == 1)
 	{
 		// Add point to that player
-		// ...
+		sf::Uint8 clientID = playerControllersList.back()->GetOwningClientID();
+		clientStates.at(clientID)->AddPoint();
 		// Delete last player controller
 		delete playerControllersList.back();
 		playerControllersList.clear();
@@ -334,6 +340,7 @@ void GameController::HandleClientConnection()
 		{
 			// Connected - say hello
 			receivedPacket = connectionInfoClient.CreateHandshakePacket();
+			lastSentMessageTime = Timer::Instance().GetSimulationTime();
 			connectionInfoClient.SendPacketTCP(receivedPacket);
 			LOG(INFO) << "Sending first message to the server.";
 		}
@@ -347,6 +354,9 @@ void GameController::HandleClientConnection()
 			// Received confirmation packet
 			HandshakePacket handshakePacketInfo;
 			receivedPacket >> handshakePacketInfo;
+
+			roundTripTime = Timer::Instance().GetSimulationTime() - lastSentMessageTime;
+			clientServerClockDifference = Timer::Instance().GetSimulationTime() - (handshakePacketInfo.timestamp + (roundTripTime / 2));	// latency doesn't have to be RTT/2 but it should be good enough approximation
 
 			// Check if server accepted this client
 			if (handshakePacketInfo.accepted)
@@ -433,7 +443,9 @@ void GameController::HandleServerConnection()
 					// Accept connection
 					responsePacket = connectionInfoServer.CreateHandshakePacket(true);
 					connectionInfoServer.SendPacketTCP(responsePacket, id);
+					connectionInfoServer.SaveClientUDPAddress(id, handshakePacketInfo.clientPort);
 					clientStates.at(id)->SetConnected();
+					clientStates.at(id)->SetSimulationStartTime(handshakePacketInfo.timestamp);
 					LOG(INFO) << "Player with ID " << id << " joined the server.";
 				}
 			}
@@ -465,29 +477,29 @@ void GameController::PackClientPacket(sf::Packet & packet)
 
 	// Check for any ClientSimulationUpdate changes since last NetworkUpdate()
 	//..
-	clientPacket.objectID = 0;	//
+	clientPacket.objectID = 0;	// Thats refering only to clientSimulationUpdate variable, not other commands as server will know where they come from
 	clientPacket.clientSimulationUpdate = ClientSimulationUpdate::Nothingg;	// isn't that waste of bandwith? Usually nothing will be sent.
 
 	// Check for any input commands to send
 	std::vector<ClientActionCommand> commands;
 	Input& input = Input::Instance();
-	if (input.HorizontalInput() > 0)
+	if (input.isKeyPressed(KeyName::right))
 	{
 		commands.push_back(ClientActionCommand::MoveRight);
 	}
-	else if (input.HorizontalInput() < 0)
+	else if (input.isKeyPressed(KeyName::left))
 	{
 		commands.push_back(ClientActionCommand::MoveLeft);
 	}
-	if (input.VerticalInput() > 0)
+	if (input.isKeyPressed(KeyName::up))
 	{
 		commands.push_back(ClientActionCommand::MoveUp);
 	}
-	else if (input.VerticalInput() < 0)
+	else if (input.isKeyPressed(KeyName::down))
 	{
 		commands.push_back(ClientActionCommand::MoveDown);
 	}
-	if (input.IsSpacePressed())
+	if (input.isKeyPressed(KeyName::action))
 	{
 		commands.push_back(ClientActionCommand::PressActionButton);
 	}
@@ -497,7 +509,7 @@ void GameController::PackClientPacket(sf::Packet & packet)
 	packet << clientPacket;
 	for (int i = 0; i < commands.size(); ++i)
 	{
-		packet << commands.at(i);
+		packet << (sf::Uint8)commands.at(i);
 	}
 }
 
@@ -509,8 +521,9 @@ void GameController::UnpackClientPacket(sf::Packet & packet, sf::Uint8 clientID)
 	if (clientCommandsHistory.at(clientID).size() > 0)
 	{
 		// First check if this packet arrived in order/isn't a duplicate
-		if (clientCommandsHistory.at(clientID).front()->first >= clientPacket.timestamp)
+		if (clientPacket.timestamp <= clientCommandsHistory.at(clientID).front()->first)
 		{
+			LOG(WARNING, INGAME) << "Client(ID: " << (int)clientID << ") packet arrived out of order! Timestamp: " << clientPacket.timestamp << ". Last one: " << clientCommandsHistory.at(clientID).front()->first;
 			return;
 		}
 	}
@@ -530,6 +543,9 @@ void GameController::UnpackClientPacket(sf::Packet & packet, sf::Uint8 clientID)
 	newCommands->first = clientPacket.timestamp;
 	newCommands->second = commands;
 	clientCommandsHistory.at(clientID).push_front(newCommands);
+
+	// Set this input on player controller
+	playerControllersList.at(clientID)->SetPlayerInput(commands);
 }
 
 void GameController::PackServerPacket(sf::Packet & packet, sf::Uint8 clientID, ServerGameStateCommand message)
@@ -537,7 +553,7 @@ void GameController::PackServerPacket(sf::Packet & packet, sf::Uint8 clientID, S
 	ServerPacket serverPacket;
 	serverPacket.timestamp = Timer::Instance().GetSimulationTime();
 	serverPacket.serverGameStateCommand = (sf::Uint8)message;
-	
+
 	// Save data needed to be sent
 	vector<ServerUpdatePacket> updates;
 	if (message == ServerGameStateCommand::StartGame)
@@ -560,38 +576,47 @@ void GameController::PackServerPacket(sf::Packet & packet, sf::Uint8 clientID, S
 
 void GameController::PackServerGameStateChanges(vector<ServerUpdatePacket>& updates)
 {
-	// Check what information exactly player needs
-	// ..(for now just send everything)
-	for (auto& crate : crateObjects)
+	if (networkingUpdates % 10 == 0)
 	{
-		ServerUpdatePacket newUpdate;
-		newUpdate.objectID = crate->GetID();
-		if (crate->IsMarkedForDestruction())
+		// Check what information exactly player needs and pack that
+		for (auto& crate : crateObjects)
 		{
-			newUpdate.updateType = ServerUpdateType::Destroy;
-			newUpdate.fieldThree = true;
-		}
-		else
-		{
-			newUpdate.updateType = ServerUpdateType::Position;
-			newUpdate.fieldOne = crate->GetPhysicsBody()->GetPosition().x;
-			newUpdate.fieldTwo = crate->GetPhysicsBody()->GetPosition().y;
-		}
+			// Don't send the object if it didn't move since last frame
+			if (!crate->MovedSinceLastFrame())
+				continue;
 
-		updates.push_back(newUpdate);
+			ServerUpdatePacket newUpdate;
+			newUpdate.objectID = crate->GetID();
+			if (crate->IsMarkedForDestruction())
+			{
+				newUpdate.updateType = ServerUpdateType::Destroy;
+				newUpdate.boolField = true;
+			}
+			else
+			{
+				newUpdate.updateType = ServerUpdateType::Position;
+				newUpdate.positionX = CompactFloat(crate->GetPhysicsBody()->GetPosition().x);
+				newUpdate.positionY = CompactFloat(crate->GetPhysicsBody()->GetPosition().y);
+			}
+
+			updates.push_back(newUpdate);
+		}
 	}
+
 	for (auto& player : playerControllersList)
 	{
+
+
 		ServerUpdatePacket newUpdate;
 		newUpdate.objectID = player->GetID();
 		newUpdate.updateType = ServerUpdateType::Position;
-		newUpdate.fieldOne = player->GetPhysicsBody()->GetPosition().x;
-		newUpdate.fieldTwo = player->GetPhysicsBody()->GetPosition().y;
+		newUpdate.positionX = CompactFloat(player->GetPhysicsBody()->GetPosition().x);
+		newUpdate.positionY = CompactFloat(player->GetPhysicsBody()->GetPosition().y);
 
 		if (player->IsMarkedForDestruction())
 		{
 			newUpdate.updateType = ServerUpdateType::Destroy;
-			newUpdate.fieldThree = true;
+			newUpdate.boolField = true;
 		}
 
 		updates.push_back(newUpdate);
@@ -606,10 +631,10 @@ void GameController::PackServerGameStartData(vector<ServerUpdatePacket>& updates
 		newUpdate.objectID = crate->GetID();
 
 		newUpdate.updateType = ServerUpdateType::Position;
-		newUpdate.fieldOne = crate->GetPhysicsBody()->GetPosition().x;
-		newUpdate.fieldTwo = crate->GetPhysicsBody()->GetPosition().y;
-		newUpdate.fieldThree = false;
-		newUpdate.fieldFour = crate->GetSize();
+		newUpdate.positionX = CompactFloat(crate->GetPhysicsBody()->GetPosition().x);
+		newUpdate.positionY = CompactFloat(crate->GetPhysicsBody()->GetPosition().y);
+		newUpdate.boolField = false;
+		newUpdate.size = crate->GetSize();
 
 		updates.push_back(newUpdate);
 	}
@@ -624,10 +649,10 @@ void GameController::PackServerGameStartData(vector<ServerUpdatePacket>& updates
 		else
 			newUpdate.updateType = ServerUpdateType::Position;
 
-		newUpdate.fieldOne = player->GetPhysicsBody()->GetPosition().x;
-		newUpdate.fieldTwo = player->GetPhysicsBody()->GetPosition().y;
-		newUpdate.fieldThree = true;
-		newUpdate.fieldFour = 0;	// Doesn't matter for a player
+		newUpdate.positionX = CompactFloat(player->GetPhysicsBody()->GetPosition().x);
+		newUpdate.positionY = CompactFloat(player->GetPhysicsBody()->GetPosition().y);
+		newUpdate.boolField = true;
+		newUpdate.size = 0;	// Doesn't matter for a player
 
 		updates.push_back(newUpdate);
 	}
@@ -640,9 +665,13 @@ ServerGameStateCommand GameController::UnpackServerPacket(sf::Packet & packet)
 	packet >> serverPacket;
 	ServerGameStateCommand command = (ServerGameStateCommand)serverPacket.serverGameStateCommand;
 
+	roundTripTime = Timer::Instance().GetSimulationTime() - lastSentMessageTime;
+	LOG(INFO, INGAME) << "Latency: " << roundTripTime;
+
 	// Check if it's start game message, if it is - spawn all received objects
 	if (command == ServerGameStateCommand::StartGame)
 	{
+		serverSimulationStartTime = serverPacket.timestamp;
 		updates = SpawnLevelForClient(packet, serverPacket.numberOfUpdates);
 	}
 	else if (command != ServerGameStateCommand::Nothing)
@@ -653,9 +682,9 @@ ServerGameStateCommand GameController::UnpackServerPacket(sf::Packet & packet)
 	else
 	{
 		// Check if this packet arrived in order/isn't a duplicate
-		if (serverPacket.timestamp <= snapshots.back()->first)
+		if (serverPacket.timestamp <= snapshots.front()->first)
 		{
-			LOG(WARNING, INGAME) << "timestamp: " << serverPacket.timestamp;
+			LOG(WARNING, INGAME) << "Packet arrived out of order! Timestamp: " << serverPacket.timestamp << ". Last one: " << snapshots.front()->first;
 			return ServerGameStateCommand::Nothing;
 		}
 
@@ -667,7 +696,7 @@ ServerGameStateCommand GameController::UnpackServerPacket(sf::Packet & packet)
 			updates.push_back(update);
 		}
 	}
-	
+
 
 	std::pair<float, std::vector<ServerUpdatePacket>>* newSnapshot = new std::pair<float, std::vector<ServerUpdatePacket>>();
 	newSnapshot->first = serverPacket.timestamp;
@@ -675,6 +704,27 @@ ServerGameStateCommand GameController::UnpackServerPacket(sf::Packet & packet)
 	snapshots.push_front(newSnapshot);
 
 	return (ServerGameStateCommand)serverPacket.serverGameStateCommand;
+}
+
+void GameController::PackChatPacketClient(sf::Packet & packet)
+{
+	ChatMessagePacket chatMessage;
+	chatMessage.clientID = myClientID;
+	chatMessage.PlayerName = std::string("Player " + std::to_string(myClientID));
+	chatMessage.Message = std::string("ALL YOUR BASE ARE BELONG TO US");
+	packet << chatMessage;
+}
+
+void GameController::UnpackChatPacket(sf::Packet & packet)
+{
+	ChatMessagePacket chatMessage;
+	packet >> chatMessage;
+
+	if (playerControllersList.size() >= chatMessage.clientID + 1)
+	{
+		playerControllersList.at(chatMessage.clientID)->tauntTextTimer = 3;
+		playerControllersList.at(chatMessage.clientID)->tauntText.setString(std::string(chatMessage.PlayerName + ": " + chatMessage.Message));
+	}
 }
 
 bool GameController::Update(float deltaTime)
@@ -685,6 +735,10 @@ bool GameController::Update(float deltaTime)
 	if (isWindowInFocus)
 	{
 		Input::Instance().Update();
+	}
+	else
+	{
+		Input::Instance().BlockInput();
 	}
 
 	switch (gameState)
@@ -725,21 +779,48 @@ bool GameController::Update(float deltaTime)
 		if (myNetworkingType == NetworkingType::Client)
 		{
 			// Check if any packets arrived from the server
+			unsigned short i;
 			sf::Packet serverPacket;
-			if(connectionInfoClient.ReceivePacketUDP(serverPacket))
+			if (connectionInfoClient.ReceivePacketUDP(serverPacket, i))
 				UnpackServerPacket(serverPacket);
+
+			sf::Packet chatMessagePacket;
+			if (connectionInfoClient.ReceivePacketTCP(chatMessagePacket))
+				UnpackChatPacket(chatMessagePacket);
 
 			// Interp/exterp other objects positions and predict player position
 			SimulateGame(deltaTime);
-			UpdateGame(deltaTime);
 		}
 		else
 		{
-			for (int id = 0; id < playerControllersList.size(); ++id)
+			// Keep checking for new packets until socket blocks
+			// Game state
+			bool receivePacket = true;
+			while (receivePacket)
 			{
+				unsigned short senderID = 1000;
 				sf::Packet clientPacket;
-				if (connectionInfoServer.ReceivePacketUDP(clientPacket, id))
-					UnpackClientPacket(clientPacket, id);
+
+				receivePacket = connectionInfoServer.ReceivePacketUDP(clientPacket, senderID);
+
+				if (receivePacket)
+					UnpackClientPacket(clientPacket, senderID);
+			}
+			// Chat messages
+			for (int i = 0; i < connectionInfoServer.GetConnectedClientsNumber(); ++i)
+			{
+				sf::Packet chatPacket;
+				bool receivedPacket = connectionInfoServer.ReceivePacketTCP(chatPacket, i);
+
+				if (receivedPacket)
+				{
+					// Could check packet contents here, e.g. it's length or if it contains offensive language
+					// but I'm just forwarding it to all clients
+					for (int j = 0; j < connectionInfoServer.GetConnectedClientsNumber(); ++j)
+					{
+						connectionInfoServer.SendPacketTCP(chatPacket, j);
+					}
+				}
 			}
 
 			// Update game simulation
@@ -779,13 +860,27 @@ void GameController::UpdateGame(float deltaTime)
 	// Update objects
 	for (auto &player : playerControllersList)
 	{
+		player->UpdateControl();
 		player->Update();
+		player->UpdateAnimation();
 	}
-	testObj->Update();
 	wall->Update();
 	for (auto &wall : wallObjects)
 	{
 		wall->Update();
+	}
+
+	// Delete old commands from history
+	for (int i = 0; i < clientStates.size(); ++i)
+	{
+		if (clientCommandsHistory.at(i).size() > 0)
+		{
+			float lastCmdTime = clientCommandsHistory.at(i).back()->first;
+			if (lastCmdTime - clientStates.at(i)->GetSimulationStartTime() > COMMAND_HISTORY_TIME)
+			{
+				clientCommandsHistory.at(i).pop_back();
+			}
+		}
 	}
 
 	// Destroy marked objects
@@ -833,50 +928,184 @@ void GameController::UpdateGame(float deltaTime)
 
 void GameController::SimulateGame(float deltaTime)
 {
-	std::vector<ServerUpdatePacket>* updates;
+	std::vector<ServerUpdatePacket>* updatesPrev;
+	std::vector<ServerUpdatePacket>* updatesNext;
+	float simulationTime = Timer::Instance().GetSimulationTime() - interp;
 
-	while (snapshots.size() > 2)
+	// Remove snapshots older than 1 second
+	while (snapshots.size() > (1/NETWORK_TIMESTEP))
 	{
 		snapshots.pop_back();
 	}
-	
-	updates = &snapshots.back()->second;
 
-	// .. ( now just move to the position, later interpolate)
-	for (ServerUpdatePacket updatePacket : *updates)
+	// Iterate backwards until you find 2 snapshots to interpolate between
+	bool interpolate;
+	for (std::list<std::pair<float, std::vector<ServerUpdatePacket>>*>::reverse_iterator i = snapshots.rbegin(); i != snapshots.rend(); ++i)
 	{
-		PhysicsObject* objectToUpdate = FindObjectByID(updatePacket.objectID);
-		if (objectToUpdate)
+		std::pair<float, std::vector<ServerUpdatePacket>>* snapshot = (*i);
+
+		if (snapshot == snapshots.front())
 		{
-			switch (updatePacket.updateType)
+			// There's no frames to interpolate between - extrapolate
+			interpolate = false;
+			break;
+		}
+
+		if ((simulationTime) > snapshot->first)
+		{
+			updatesPrev = &snapshot->second;
+			--i;
+			updatesNext = &((*i)->second);
+			interpolate = true;
+			break;
+		}
+	}
+
+	interpolate = false;
+	if (interpolate)
+	{
+		// Interpolate
+		for (ServerUpdatePacket updatePacketPrev : *updatesPrev)
+		{
+			PhysicsObject* objectToUpdate = FindObjectByID(updatePacketPrev.objectID);
+			for (int i = 0; i < updatesNext->size(); ++i)
 			{
-			case ServerUpdateType::Position:
-				objectToUpdate->GetPhysicsBody()->SetTransform(b2Vec2(updatePacket.fieldOne, updatePacket.fieldTwo), objectToUpdate->GetPhysicsBody()->GetAngle());
-				break;
-			case ServerUpdateType::Destroy:
-				objectToUpdate->Destroy();
-				break;
 
 			}
+		}
+	}
+	else
+	{
+		// Extrapolate
+		updatesPrev = &snapshots.front()->second;	// Update before last one
+		//updatesNext = &((*(snapshots.rbegin() + 1))->second);
+
+		for (ServerUpdatePacket updatePacket : *updatesPrev)
+		{
+			PhysicsObject* objectToUpdate = FindObjectByID(updatePacket.objectID);
+			if (objectToUpdate)
+			{
+				float posX = ExpandToFloat(updatePacket.positionX);
+				float posY = ExpandToFloat(updatePacket.positionY);
+
+				switch (updatePacket.updateType)
+				{
+				case ServerUpdateType::Position:
+					objectToUpdate->GetPhysicsBody()->SetTransform(b2Vec2(posX, posY), objectToUpdate->GetPhysicsBody()->GetAngle());
+					break;
+				case ServerUpdateType::Destroy:
+					objectToUpdate->Destroy();
+					break;
+				}
+			}
+		}
+	}
+
+
+
+	// Update objects state
+	for (auto &player : playerControllersList)
+	{
+		player->Update();
+		player->UpdateAnimation();
+	}
+	wall->Update();
+	for (auto &wall : wallObjects)
+	{
+		wall->Update();
+	}
+	// Destroy marked objects
+	if (crateObjects.size() > 0)
+	{
+		for (std::vector<CrateObject*>::iterator crate = crateObjects.begin(); crate != crateObjects.end(); )
+		{
+			(*crate)->Update();
+			if ((*crate)->IsMarkedForDestruction())
+			{
+				delete *crate;
+				crate = crateObjects.erase(crate);
+			}
+			else
+			{
+				++crate;
+			}
+		}
+	}
+
+	if (playerControllersList.size() > 1)
+	{
+		for (std::vector<Player*>::iterator player = playerControllersList.begin(); player != playerControllersList.end(); )
+		{
+			if ((*player)->IsMarkedForDestruction())
+			{
+				delete (*player);
+				player = playerControllersList.erase(player);
+
+				if (CheckWinningConditions())
+				{
+					break;
+				}
+			}
+			else
+			{
+				++player;
+			}
+
 		}
 	}
 }
 
 void GameController::UpdateNetworking()
 {
+	networkingUpdates++;
 	if (myNetworkingType == NetworkingType::Client)
 	{
+		// Input commands
 		sf::Packet clientPacket;
 		PackClientPacket(clientPacket);
-		connectionInfoClient.SendPacketUDP(clientPacket);
+		bool result = connectionInfoClient.SendPacketUDP(clientPacket);
+
+		if (!result)
+		{
+			LOG(WARNING, INGAME) << "Server closed connection. Going back to main menu.";
+			gameState = GameState::WaitingToChooseNetworkingType;
+		}
+		else
+		{
+			lastSentMessageTime = Timer::Instance().GetSimulationTime();
+		}
+
+		// Chat messages
+		if (chatMessageBlockTime <= 0)
+		{
+			if (Input::Instance().isKeyPressed(KeyName::taunt))
+			{
+				sf::Packet clientPacket;
+				PackChatPacketClient(clientPacket);
+				connectionInfoClient.SendPacketTCP(clientPacket);
+				chatMessageBlockTime = CHAT_MESSAGE_INTERVAL;
+			}
+		}
+		else
+		{
+			chatMessageBlockTime -= Timer::Instance().GetDeltaTime()*(NETWORK_TIMESTEP / PHYSICS_TIMESTEP);
+
+		}
 	}
 	else
 	{
 		for (int id = 0; id < playerControllersList.size(); ++id)
 		{
+			// Game state
 			sf::Packet serverPacket;
 			PackServerPacket(serverPacket, id, ServerGameStateCommand::Nothing);
-			connectionInfoServer.SendPacketUDP(serverPacket, id);
+			bool result = connectionInfoServer.SendPacketUDP(serverPacket, id);
+			if (!result)
+			{
+				LOG(WARNING, INGAME) << "Player disconnected. Destroying player controller.";
+				delete playerControllersList.at(id);
+				playerControllersList.erase(playerControllersList.begin() + id);
+			}
 		}
 	}
 }
@@ -887,8 +1116,6 @@ void GameController::Render()
 	{
 		window->draw(*player->GetSprite());
 	}
-	if (testObj)
-		window->draw(*testObj->GetSprite());
 	if (wall)
 		window->draw(*wall->GetSprite());
 
@@ -921,10 +1148,17 @@ void GameController::Render()
 		if (gameState == GameState::WaitingToStart)
 		{
 			if (myNetworkingType == NetworkingType::Client)
-				smallText.setString("Waiting for server to start the game.");
+			{
+				if (connectionInfoClient.GetConnectionStatus() == ConnectionStatus::ConnectionConfirmed)
+					smallText.setString("Waiting for server to start the game.");
+				else
+					smallText.setString("Trying to connect with server...");
+			}
 			else
 				smallText.setString("Press space to start the game!");
 		}
+		smallText.setOrigin(smallText.getLocalBounds().left + smallText.getLocalBounds().width / 2, smallText.getLocalBounds().top - smallText.getLocalBounds().height / 2);
+		smallText.setPosition(0, 40);
 
 		window->draw(bigText);
 		window->draw(smallText);

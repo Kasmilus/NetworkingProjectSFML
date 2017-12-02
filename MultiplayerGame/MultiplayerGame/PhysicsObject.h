@@ -27,6 +27,9 @@ public:
 	inline void Destroy() { isMarkedForDestruction = true; }	// Will destroy the object at the end of the frame
 	void SetID(sf::Uint8 value) { ID = value; }
 	sf::Uint8 GetID() { return ID; }
+	void SetAsServerObject() { isOnServer = true; }
+	bool IsServerObject() { return isOnServer; }
+	bool MovedSinceLastFrame() { return movedSinceLastFrame; }
 
 	// Collision calls
 	virtual void BeginCollision(b2Fixture* coll, bool isTrigger);
@@ -43,6 +46,7 @@ protected:
 	b2Body* physicsBody;
 	b2RevoluteJoint* grabJoint;
 	const float MAX_VELOCITY = 10.0f;
+	b2Vec2 lastFramePos;
 
 	// Graphics
 	sf::Texture* texture;
@@ -56,6 +60,8 @@ protected:
 	void updatePosition();
 	void clampVelocity();
 
-
+	// Networking
+	bool isOnServer;	// if true - call all events as normally, otherwise just update state based on data received from the server
+	bool movedSinceLastFrame;
 };
 

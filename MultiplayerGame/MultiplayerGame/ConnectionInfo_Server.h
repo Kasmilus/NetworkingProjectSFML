@@ -21,6 +21,7 @@ public:
 	bool ListenForConnections();
 	void CloseConnectionWithClient(unsigned short clientID);
 	bool CheckIfClientDisconnected(sf::Socket::Status status, unsigned short clientID);
+	void SaveClientUDPAddress(unsigned short clientID, sf::Uint16 port);
 
 	// These functions are mean't to be overridden by server and player
 	// ReceiverID - ID of the client who should receive the packet. Not relevant for client class(always sends to server)
@@ -28,7 +29,7 @@ public:
 	virtual bool SendPacketUDP(sf::Packet& packet, unsigned short receiverID) override;
 	// Fills given packet object if received data
 	virtual bool ReceivePacketTCP(sf::Packet& packet, unsigned short senderID) override;
-	virtual bool ReceivePacketUDP(sf::Packet& packet, unsigned short senderID) override;
+	virtual bool ReceivePacketUDP(sf::Packet& packet, unsigned short& senderID) override;
 
 	// Create first packet to be sent after making connection
 	sf::Packet CreateHandshakePacket(bool acceptClient);
@@ -44,6 +45,7 @@ private:
 
 	// Connected clients network info
 	std::vector<std::unique_ptr<sf::TcpSocket>> connectedClientSockets;
+	std::vector<sf::Uint16> connectedClientSocketsUDP;	// just ports, testing it on local machine anyway
 
 	// Connected players game info
 	std::vector<ClientState*>* clientStates;

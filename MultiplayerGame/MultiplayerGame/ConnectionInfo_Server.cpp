@@ -38,7 +38,7 @@ bool ConnectionInfo_Server::BindUDPSocket()
 
 bool ConnectionInfo_Server::ListenForConnections()
 {
-	if(!isListening)
+	if (!isListening)
 		listenStatus = myServerListenerTCP.listen(serverPort);
 
 	if (listenStatus == sf::Socket::Done)
@@ -57,7 +57,7 @@ bool ConnectionInfo_Server::ListenForConnections()
 			ClientState* clientState = new ClientState(client->getRemoteAddress().toString());
 			clientStates->push_back(clientState);
 
-			LOG(INFO) << "Client with ID " << connectedClientSockets.size()-1 << " connected.";
+			LOG(INFO) << "Client with ID " << connectedClientSockets.size() - 1 << " connected.";
 			return true;
 		}
 		else
@@ -94,6 +94,12 @@ bool ConnectionInfo_Server::CheckIfClientDisconnected(sf::Socket::Status status,
 	}
 
 	return false;
+}
+
+void ConnectionInfo_Server::SaveClientUDPAddress(unsigned short clientID, sf::Uint16 port)
+{
+	connectedClientSocketsUDP.resize(connectedClientSockets.size());	// Make sure size is matching, TCP sockets are always saved correctly while packets with UDP may get at different order and clientID would be saved incorrectly
+	connectedClientSocketsUDP.at(clientID) = port;
 }
 
 void ConnectionInfo_Server::CloseConnectionWithClient(unsigned short clientID)
@@ -142,7 +148,7 @@ bool ConnectionInfo_Server::SendPacketUDP(sf::Packet& packet, unsigned short rec
 
 	// Get client's IP and port
 	sf::IpAddress ip = serverIP;
-	unsigned short port = ClientPortUDP;
+	unsigned short port = connectedClientSocketsUDP.at(receiverID);
 
 	// Send packet
 	sf::Socket::Status status = myServerSocketUDP.send(packet, ip, port);
@@ -158,6 +164,11 @@ bool ConnectionInfo_Server::SendPacketUDP(sf::Packet& packet, unsigned short rec
 bool ConnectionInfo_Server::ReceivePacketTCP(sf::Packet& packet, unsigned short senderID)
 {
 	sf::Socket::Status status = connectedClientSockets.at(senderID)->receive(packet);
+
+	bool broken = CheckIfClientDisconnected(status, senderID);
+	if (broken)
+		return false;
+
 	bool error = CheckForError(status, "Server receive packet (TCP) error.");
 	if (error)
 		return false;
@@ -171,20 +182,8 @@ bool ConnectionInfo_Server::ReceivePacketTCP(sf::Packet& packet, unsigned short 
 	return false;
 }
 
-bool ConnectionInfo_Server::ReceivePacketUDP(sf::Packet& packet, unsigned short senderID)
+bool ConnectionInfo_Server::ReceivePacketUDP(sf::Packet& packet, unsigned short& senderID)
 {
-	// Check if ID is correct
-	if (senderID >= connectedClientSockets.size())
-	{
-		LOG(ERROR) << "Client with that ID isn't connected! (invalid senderID: " << senderID << ".";
-		return false;
-	}
-	else if (senderID < 0)
-	{
-		LOG(ERROR) << "Client ID can't be negative! (invalid senderID: " << senderID << ".";
-		return false;
-	}
-
 	// Get client's IP and port
 	sf::IpAddress ip;
 	unsigned short port;
@@ -196,6 +195,18 @@ bool ConnectionInfo_Server::ReceivePacketUDP(sf::Packet& packet, unsigned short 
 
 	if (status == sf::Socket::Done)
 	{
+		for (int i = 0; i < connectedClientSocketsUDP.size(); ++i)
+		{
+			if (connectedClientSocketsUDP.at(i) == port)
+				senderID = i;
+		}
+
+		if (senderID >= 100)
+		{
+			LOG(ERROR, NETWORK) << "Received UDP packet from unknown sender! Port: " << port;
+			return false;
+		}
+
 		// Packet is filled with data, return true so calling function knows it can unpack it
 		return true;
 	}

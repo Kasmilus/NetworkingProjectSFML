@@ -1,5 +1,5 @@
 #include "ContactListener.h"
-
+#include "Log.h"
 
 
 ContactListener::ContactListener()
@@ -17,6 +17,19 @@ void ContactListener::BeginContact(b2Contact * contact)
 	b2Fixture* fixB = contact->GetFixtureB();
 	// Call collision function in body A
 	void* bodyUserData = contact->GetFixtureA()->GetBody()->GetUserData();
+
+	// Check if it's collision on server or client
+	// client objects shouldn't respond to those events
+	if (bodyUserData)
+	{
+		if (!static_cast<PhysicsObject*>(bodyUserData)->IsServerObject())
+		{
+			LOG(INFO, INGAME) << "Client object, ignoring collision event";
+			return;
+		}
+	}
+
+
 	if (bodyUserData)
 		static_cast<PhysicsObject*>(bodyUserData)->BeginCollision(fixB, (fixA->IsSensor() || fixB->IsSensor()));
 
@@ -34,6 +47,16 @@ void ContactListener::EndContact(b2Contact * contact)
 
 	// Call collision function in body A
 	void* bodyUserData = contact->GetFixtureA()->GetBody()->GetUserData();
+
+	if (bodyUserData)
+	{
+		if (!static_cast<PhysicsObject*>(bodyUserData)->IsServerObject())
+		{
+			LOG(INFO, INGAME) << "Client object, ignoring collision event";
+			return;
+		}
+	}
+
 	if (bodyUserData)
 		static_cast<PhysicsObject*>(bodyUserData)->EndCollision(fixB, (fixA->IsSensor() || fixB->IsSensor()));
 

@@ -15,6 +15,7 @@ public:
 	bool BindUDPSocket();
 	bool ConnectToServer();
 	bool CheckIfDisconnected(sf::Socket::Status status);
+	sf::Uint8 GetUDPPort() { return MyClientSocketUDP.getLocalPort(); }
 
 	// These functions are mean't to be overridden by server and player
 	// ReceiverID - ID of the client who should receive the packet. Not relevant for client class(always sends to server)
@@ -22,7 +23,7 @@ public:
 	virtual bool SendPacketUDP(sf::Packet &packet, unsigned short receiverID = 0) override;
 	// Fills given packet object if received data
 	virtual bool ReceivePacketTCP(sf::Packet& packet, unsigned short senderID = 0) override;
-	virtual bool ReceivePacketUDP(sf::Packet& packet, unsigned short senderID = 0) override;
+	virtual bool ReceivePacketUDP(sf::Packet& packet, unsigned short& senderID) override;
 
 	// Create first packet to be sent after making connection
 	virtual sf::Packet CreateHandshakePacket();

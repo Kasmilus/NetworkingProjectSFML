@@ -194,6 +194,7 @@
     <ClCompile Include="..\include\Box2D\Dynamics\Joints\b2WeldJoint.cpp" />
     <ClCompile Include="..\include\Box2D\Dynamics\Joints\b2WheelJoint.cpp" />
     <ClCompile Include="..\include\Box2D\Rope\b2Rope.cpp" />
+    <ClCompile Include="ClientCommandInput.cpp" />
     <ClCompile Include="ClientState.cpp" />
     <ClCompile Include="ConnectionInfo.cpp" />
     <ClCompile Include="ConnectionInfo_Client.cpp" />
@@ -257,6 +258,7 @@
     <ClInclude Include="..\include\Box2D\Dynamics\Joints\b2WeldJoint.h" />
     <ClInclude Include="..\include\Box2D\Dynamics\Joints\b2WheelJoint.h" />
     <ClInclude Include="..\include\Box2D\Rope\b2Rope.h" />
+    <ClInclude Include="ClientCommandInput.h" />
     <ClInclude Include="ClientState.h" />
     <ClInclude Include="ConnectionInfo.h" />
     <ClInclude Include="ConnectionInfo_Client.h" />

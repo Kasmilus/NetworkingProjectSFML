@@ -3,13 +3,17 @@
 #include <SFML/Window/Keyboard.hpp>
 #include "Timer.h"
 
+enum KeyName { left, right, up, down, action, taunt};
+
 class Input
 {
 public:
 	static Input& Instance();
 
-	void Update();
+	virtual void Update();
+	inline void BlockInput() { blockInput = true; }	// blocks input when window is not in focus
 
+	bool isKeyPressed(KeyName key);
 	float HorizontalInput() {return horizontalInput; }
 	float VerticalInput() { return verticalInput; }
 	bool IsSpaceDown() { return (spacePressed && !spacePressedLastFrame); }
@@ -19,11 +23,10 @@ public:
 	bool IsDebugDrawDown() { return debugDrawDown && !debugDrawDownLastFrame; }
 	bool IsTauntButtonPressed() { return tauntButtonDown; }
 
-private:
+protected:
 	Input() {}
 	Input(Input const&);              // Don't Implement.
 	void operator=(Input const&); // Don't implement
-
 
 	// Control hor/vert input
 	const float SENSITIVITY = 0.4f;
@@ -38,5 +41,12 @@ private:
 
 	float horizontalInput;
 	float verticalInput;
+
+private:
+	// Called only on client, server shouldn't care
+	void UpdateClient();
+
+	bool blockInput = false;
+
 };
 

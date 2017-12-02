@@ -19,17 +19,20 @@ Player::Player(b2World* physicsWorld, sf::Font* font, bool isDynamic, float posX
 	tauntText.setFont(*font);
 	tauntText.setString("");
 	tauntText.setCharacterSize(22);
-	tauntText.setScale(0.1f, 0.1f);
+	tauntText.setScale(0.1f, -0.1f);
 	tauntText.setColor(sf::Color::Red);
-	tauntText.setPosition(posX, posY);
+	tauntText.setPosition(posX - 200, posY - 60);
+
+	playerInput = new ClientCommandInput();
 
 	// Default values for variables
 	isHoldingObject = false;
 	throwPower = 1000;
 	attackCharge = 0;
 	canMove = false;
-
 	heldObject = nullptr;
+	owningClientID = -1;
+	tauntTextTimer = 0;
 }
 
 
@@ -48,61 +51,15 @@ Player::~Player()
 
 void Player::Update()
 {
-	if (canMove)
+	// Taunt
+	if (tauntTextTimer < 0)
 	{
-		move();
-
-		if (Input::Instance().IsSpaceDown())
-		{
-			Player* enemyPlayer = getPlayerInRange();
-			if (enemyPlayer != nullptr)
-			{
-				punchPlayer(enemyPlayer);
-			}
-			if (enemyPlayer == nullptr)
-			{
-				if (!isHoldingObject)
-				{
-					PhysicsObject* objectToPickUp = getObjectInRange();
-					if (objectToPickUp != nullptr)
-					{
-						pickUpObject(objectToPickUp);
-					}
-				}
-			}
-		}
-		else if (Input::Instance().IsSpaceReleased())
-		{
-			if (isHoldingObject)
-			{
-				throwObject();
-			}
-		}
-
-		if (Input::Instance().IsSpacePressed())
-		{
-			// Charge attack
-			attackCharge += Timer::Instance().GetDeltaTime();
-
-			if (attackCharge > 3)
-				attackCharge = 3;
-		}
-
-		if (Input::Instance().IsTauntButtonPressed() && tauntTextTimer <= -1.0f)
-		{
-			ShowTaunt();
-		}
-
-		if (tauntTextTimer < 0)
-		{
-			tauntText.setString("");
-		}
-		else
-		{
-			tauntText.setPosition(sprite.getPosition());
-		}
+		tauntText.setString("");
+	}
+	else
+	{
+		tauntText.setPosition(sprite.getPosition());
 		tauntTextTimer -= Timer::Instance().GetDeltaTime();
-
 	}
 
 	// Check if all pointers are valid
@@ -132,9 +89,98 @@ void Player::Update()
 	PhysicsObject::Update();
 }
 
+void Player::UpdateControl()
+{
+	playerInput->Update();
+
+	move();
+
+	if (playerInput->IsSpaceDown())
+	{
+		Player* enemyPlayer = getPlayerInRange();
+		if (enemyPlayer != nullptr)
+		{
+			punchPlayer(enemyPlayer);
+		}
+		if (enemyPlayer == nullptr)
+		{
+			if (!isHoldingObject)
+			{
+				PhysicsObject* objectToPickUp = getObjectInRange();
+				if (objectToPickUp != nullptr)
+				{
+					pickUpObject(objectToPickUp);
+				}
+			}
+		}
+	}
+	else if (playerInput->IsSpaceReleased())
+	{
+		if (isHoldingObject)
+		{
+			throwObject();
+		}
+	}
+
+	if (playerInput->IsSpacePressed())
+	{
+		// Charge attack
+		attackCharge += Timer::Instance().GetDeltaTime();
+
+		if (attackCharge > 3)
+			attackCharge = 3;
+	}
+}
+
+void Player::UpdateAnimation()
+{
+	b2Vec2 currentPos = physicsBody->GetPosition();
+
+	float newAngle = lastFrameRotation;
+	if (currentPos.x - lastFramePos.x > 0)
+		newAngle = 0;
+	else if (currentPos.x - lastFramePos.x < 0)
+		newAngle = 180;
+	else if (currentPos.y - lastFramePos.y < 0)
+		newAngle = 270;
+	else if (currentPos.y - lastFramePos.y > 0)
+		newAngle = 90;
+
+	if (lastFrameRotation != newAngle)
+	{
+		newAngle = newAngle / 180 * 3.14f;
+		physicsBody->SetTransform(physicsBody->GetPosition(), newAngle);
+	}
+	lastFrameRotation = newAngle;
+	lastFramePos = physicsBody->GetPosition();
+}
+
 void Player::Hit()
 {
 	Destroy();
+}
+
+void Player::SetPlayerInput(std::vector<ClientActionCommand>& commands)
+{
+	float horInput = 0;
+	float verInput = 0;
+	bool spacePressed = false;
+
+	for (ClientActionCommand& cmd : commands)
+	{
+		if (cmd == ClientActionCommand::MoveLeft)
+			horInput = -1;
+		else if (cmd == ClientActionCommand::MoveRight)
+			horInput = 1;
+		else if (cmd == ClientActionCommand::MoveUp)
+			verInput = 1;
+		else if (cmd == ClientActionCommand::MoveDown)
+			verInput = -1;
+		else if (cmd == ClientActionCommand::PressActionButton)
+			spacePressed = true;
+	}
+
+	playerInput->UpdateInput(horInput, verInput, spacePressed);
 }
 
 void Player::BeginCollision(b2Fixture* coll, bool isTrigger)
@@ -166,7 +212,7 @@ void Player::BeginCollision(b2Fixture* coll, bool isTrigger)
 		if (collObj && !enemyPlayer && collObj != heldObject)
 		{
 			b2Vec2 objVelocity = collObj->GetPhysicsBody()->GetLinearVelocity();
-			if (objVelocity.Length() * collObj->GetSize() > 0.75f)
+			if (objVelocity.Length() * collObj->GetSize() > 15.75f)
 			{
 				// Check if object is flying in players direction
 				b2Vec2 posDiff = physicsBody->GetPosition() - collObj->GetPhysicsBody()->GetPosition();
@@ -198,19 +244,18 @@ void Player::EndCollision(b2Fixture* coll, bool isTrigger)
 	}
 }
 
-void Player::ShowTaunt()
-{
-	tauntText.setString("ALL YOUR BASE ARE BELONG TO US");
-	tauntTextTimer = 1.5f;
-}
-
 void Player::move()
 {
+	//Set input source(different for server/client)
+	Input* input = &Input::Instance();
+	if (isOnServer)
+		input = playerInput;
+
 	float speed = 10.0f;
-	float horInput = Input::Instance().HorizontalInput();
+	float horInput = input->HorizontalInput();
 	if (horInput != 0)
 		horInput = horInput > 0 ? 1 : -1;
-	float verInput = Input::Instance().VerticalInput();
+	float verInput = input->VerticalInput();
 	if (verInput != 0)
 		verInput = verInput > 0 ? 1 : -1;
 
@@ -221,22 +266,6 @@ void Player::move()
 	physicsBody->SetLinearVelocity(b2Vec2(horInput*speed, -verInput*speed));
 
 	physicsBody->SetAngularVelocity(0);
-
-	float newAngle = lastFrameRotation;
-	if (horInput > 0)
-		newAngle = 0;
-	else if (horInput < 0)
-		newAngle = 180;
-	else if (verInput > 0)
-		newAngle = 270;
-	else if (verInput < 0)
-		newAngle = 90;
-
-	if (lastFrameRotation != newAngle)
-	{
-		newAngle = newAngle / 180 * 3.14f;
-		physicsBody->SetTransform(physicsBody->GetPosition(), newAngle);
-	}
 }
 
 void Player::pickUpObject(PhysicsObject* objectToPickUp)

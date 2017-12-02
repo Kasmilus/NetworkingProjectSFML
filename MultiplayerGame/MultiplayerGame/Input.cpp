@@ -11,16 +11,17 @@ Input & Input::Instance()
 void Input::Update()
 {
 	float deltaTime = Timer::Instance().GetDeltaTime();
+	blockInput = false;
 
 	// Horizontal
-	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left) || sf::Keyboard::isKeyPressed(sf::Keyboard::A))
+	if (isKeyPressed(left))
 	{
 		horizontalInput -= SENSITIVITY * deltaTime;
 		// Snap to 0 after changing dir
 		if (horizontalInput > 0)
 			horizontalInput = 0;
 	}
-	else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right) || sf::Keyboard::isKeyPressed(sf::Keyboard::D))
+	else if(isKeyPressed(right))
 	{
 		horizontalInput += SENSITIVITY * deltaTime;
 		// Snap to 0 after changing dir
@@ -46,14 +47,14 @@ void Input::Update()
 	else if (horizontalInput < -1) horizontalInput = -1;
 
 	// Vertical
-	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down) || sf::Keyboard::isKeyPressed(sf::Keyboard::S))
+	if (isKeyPressed(down))
 	{
 		verticalInput += SENSITIVITY * deltaTime;
 		// Snap to 0 after changing dir
 		if (verticalInput < 0)
 			verticalInput = 0;
 	}
-	else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up) || sf::Keyboard::isKeyPressed(sf::Keyboard::W))
+	else if (isKeyPressed(up))
 	{
 		verticalInput -= SENSITIVITY * deltaTime;
 		// Snap to 0 after changing dir
@@ -80,15 +81,61 @@ void Input::Update()
 
 	// Space
 	spacePressedLastFrame = spacePressed;
-	spacePressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Space);
+	spacePressed = isKeyPressed(action);
 
 	// Debug draw
 	debugDrawDownLastFrame = debugDrawDown;
 	debugDrawDown = sf::Keyboard::isKeyPressed(sf::Keyboard::I);
 
-	// Taunt
-	tauntButtonDown = sf::Keyboard::isKeyPressed(sf::Keyboard::G);
+}
 
+bool Input::isKeyPressed(KeyName key)
+{
+	if (blockInput)
+		return false;
+
+	if (key == KeyName::left)
+	{
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left) || sf::Keyboard::isKeyPressed(sf::Keyboard::A))
+			return true;
+		else
+			return false;
+	}
+	if (key == KeyName::right)
+	{
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right) || sf::Keyboard::isKeyPressed(sf::Keyboard::D))
+			return true;
+		else
+			return false;
+	}
+	if (key == KeyName::up)
+	{
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up) || sf::Keyboard::isKeyPressed(sf::Keyboard::W))
+			return true;
+		else
+			return false;
+	}
+	if (key == KeyName::down)
+	{
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down) || sf::Keyboard::isKeyPressed(sf::Keyboard::S))
+			return true;
+		else
+			return false;
+	}
+	if (key == KeyName::action)
+	{
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Space) || sf::Keyboard::isKeyPressed(sf::Keyboard::Return))
+			return true;
+		else
+			return false;
+	}
+	if (key == KeyName::taunt)
+	{
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::G))
+			return true;
+		else
+			return false;
+	}
 }
 
 bool Input::IsQuitPressed()
@@ -99,4 +146,8 @@ bool Input::IsQuitPressed()
 	}
 
 	return false;
+}
+
+void Input::UpdateClient()
+{
 }

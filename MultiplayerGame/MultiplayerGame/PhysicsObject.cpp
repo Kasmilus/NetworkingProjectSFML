@@ -55,8 +55,15 @@ PhysicsObject::~PhysicsObject()
 
 void PhysicsObject::Update()
 {
+	movedSinceLastFrame = false;
 	updatePosition();
 	clampVelocity();
+
+	if (physicsBody->GetPosition() != lastFramePos)
+	{
+		movedSinceLastFrame = true;
+	}
+	lastFramePos = physicsBody->GetPosition();
 }
 
 void PhysicsObject::PickedUp(PhysicsObject* player)

@@ -4,6 +4,7 @@
 #include "SFML/Network.hpp"
 #include "Timer.h"
 #include "Log.h"
+#include "Box2D\Box2D.h"
 
 /*
 Class contains info both clients and server need
@@ -17,7 +18,7 @@ enum ConnectionStatus { NoConnection, Disconnected, ConnectionUnconfirmed, Conne
 // Commands - these would ideally be specified somewhere else with appropirate descriptions
 enum ServerGameStateCommand : sf::Uint8 { Nothing, StartGame, EndRound, EndGame };
 enum ServerUpdateType : sf::Uint8 { Position, Destroy, PlayerCharacter };	// This update contains Position - position update, Destroy if object should be destroyed, playerCharacter - it is character this player controls
-enum ClientSimulationUpdate : sf::Uint8 { Nothingg, Death};	// Anything not related to player directly controlling character
+enum ClientSimulationUpdate : sf::Uint8 { Nothingg, Death };	// Anything not related to player directly controlling character
 enum ClientActionCommand : sf::Uint8 { MoveUp, MoveDown, MoveLeft, MoveRight, PressActionButton };
 
 // Change float to short
@@ -30,6 +31,17 @@ static short CompactFloat(float input) {
 }
 static float ExpandToFloat(short input) {
 	return ((float)input) * ExpandRange / CompactRange;
+}
+// Interpolating between 2 values
+static float Lerp(float a, float b, float t)
+{
+	return ((1 - t) * a) + (t * b);
+}
+// Cosine interpolation
+static float CosInterp(float a, float b, float t)
+{
+	float t2 = (1 - cos(t*b2_pi)) / 2;
+	return (a * (1 - t2) + b*t2);
 }
 
 // Client will send ClientPacket(and a number of ClientActionCommands) and receive ServerPacket(with a number of ServerUpdatePackets)

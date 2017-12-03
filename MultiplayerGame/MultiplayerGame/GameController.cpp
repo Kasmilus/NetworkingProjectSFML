@@ -30,7 +30,6 @@ void GameController::Init(sf::RenderWindow *window)
 
 	// Networking
 	connectionInfoServer.PassClientStatesPointer(&clientStates);
-	networkingUpdates = 0;
 
 	// Text
 	font.loadFromFile("../resources/BebasNeue.otf");
@@ -126,8 +125,6 @@ void GameController::GenerateLevel()
 	{
 		Player* newPlayerController = new Player(physicsWorld, &font, true, playerStartPos[i][0], playerStartPos[i][1], 3, 3);
 		newPlayerController->SetID(numberOfSpawnedObjects);
-		if (i == 0)
-			newPlayerController->canMove = true;
 		newPlayerController->SetAsServerObject();
 		newPlayerController->SetOwningClient(i);
 		playerControllersList.push_back(newPlayerController);
@@ -202,7 +199,7 @@ std::vector<ServerUpdatePacket> GameController::SpawnLevelForClient(sf::Packet p
 		{
 			Player* newPlayerController = new Player(physicsWorld, &font, true, posX, posY, 3, 3);
 			newPlayerController->SetID(id);
-			newPlayerController->canMove = true;
+			newPlayerController->ownedByClient = true;
 			myClientID = id;
 			playerControllersList.push_back(newPlayerController);
 		}
@@ -545,7 +542,8 @@ void GameController::UnpackClientPacket(sf::Packet & packet, sf::Uint8 clientID)
 	clientCommandsHistory.at(clientID).push_front(newCommands);
 
 	// Set this input on player controller
-	playerControllersList.at(clientID)->SetPlayerInput(commands);
+	if (playerControllersList.size() >= clientID + 1)
+		playerControllersList.at(clientID)->SetPlayerInput(commands);
 }
 
 void GameController::PackServerPacket(sf::Packet & packet, sf::Uint8 clientID, ServerGameStateCommand message)
@@ -576,31 +574,28 @@ void GameController::PackServerPacket(sf::Packet & packet, sf::Uint8 clientID, S
 
 void GameController::PackServerGameStateChanges(vector<ServerUpdatePacket>& updates)
 {
-	if (networkingUpdates % 10 == 0)
+	// Check what information exactly player needs and pack that
+	for (auto& crate : crateObjects)
 	{
-		// Check what information exactly player needs and pack that
-		for (auto& crate : crateObjects)
+		// Don't send the object if it didn't move since last frame
+		if (!crate->MovedSinceLastFrame())
+			continue;
+
+		ServerUpdatePacket newUpdate;
+		newUpdate.objectID = crate->GetID();
+		if (crate->IsMarkedForDestruction())
 		{
-			// Don't send the object if it didn't move since last frame
-			if (!crate->MovedSinceLastFrame())
-				continue;
-
-			ServerUpdatePacket newUpdate;
-			newUpdate.objectID = crate->GetID();
-			if (crate->IsMarkedForDestruction())
-			{
-				newUpdate.updateType = ServerUpdateType::Destroy;
-				newUpdate.boolField = true;
-			}
-			else
-			{
-				newUpdate.updateType = ServerUpdateType::Position;
-				newUpdate.positionX = CompactFloat(crate->GetPhysicsBody()->GetPosition().x);
-				newUpdate.positionY = CompactFloat(crate->GetPhysicsBody()->GetPosition().y);
-			}
-
-			updates.push_back(newUpdate);
+			newUpdate.updateType = ServerUpdateType::Destroy;
+			newUpdate.boolField = true;
 		}
+		else
+		{
+			newUpdate.updateType = ServerUpdateType::Position;
+			newUpdate.positionX = CompactFloat(crate->GetPhysicsBody()->GetPosition().x);
+			newUpdate.positionY = CompactFloat(crate->GetPhysicsBody()->GetPosition().y);
+		}
+
+		updates.push_back(newUpdate);
 	}
 
 	for (auto& player : playerControllersList)
@@ -666,7 +661,6 @@ ServerGameStateCommand GameController::UnpackServerPacket(sf::Packet & packet)
 	ServerGameStateCommand command = (ServerGameStateCommand)serverPacket.serverGameStateCommand;
 
 	roundTripTime = Timer::Instance().GetSimulationTime() - lastSentMessageTime;
-	LOG(INFO, INGAME) << "Latency: " << roundTripTime;
 
 	// Check if it's start game message, if it is - spawn all received objects
 	if (command == ServerGameStateCommand::StartGame)
@@ -930,63 +924,145 @@ void GameController::SimulateGame(float deltaTime)
 {
 	std::vector<ServerUpdatePacket>* updatesPrev;
 	std::vector<ServerUpdatePacket>* updatesNext;
+	ServerUpdatePacket playerLatestUpdate;
 	float simulationTime = Timer::Instance().GetSimulationTime() - interp;
+	float normalizedTimeInbetween;	// at which point between those 2 values are we now?
 
 	// Remove snapshots older than 1 second
-	while (snapshots.size() > (1/NETWORK_TIMESTEP))
+	while (snapshots.size() > (1 / NETWORK_TIMESTEP))
 	{
 		snapshots.pop_back();
 	}
 
 	// Iterate backwards until you find 2 snapshots to interpolate between
-	bool interpolate;
-	for (std::list<std::pair<float, std::vector<ServerUpdatePacket>>*>::reverse_iterator i = snapshots.rbegin(); i != snapshots.rend(); ++i)
+	bool interpolate = false;
+	for (std::list<std::pair<float, std::vector<ServerUpdatePacket>>*>::iterator i = snapshots.begin(); i != snapshots.end(); ++i)
 	{
 		std::pair<float, std::vector<ServerUpdatePacket>>* snapshot = (*i);
 
-		if (snapshot == snapshots.front())
-		{
-			// There's no frames to interpolate between - extrapolate
-			interpolate = false;
-			break;
-		}
-
-		if ((simulationTime) > snapshot->first)
+		if ((simulationTime) > snapshot->first + clientServerClockDifference)
 		{
 			updatesPrev = &snapshot->second;
-			--i;
+			++i;
+
+			if (i == snapshots.end())
+			{
+				// There's no frames to interpolate between - extrapolate
+				interpolate = false;
+				break;
+			}
+
 			updatesNext = &((*i)->second);
 			interpolate = true;
+			float a = (simulationTime - ((*i)->first + clientServerClockDifference));
+			float b = (snapshot->first - (*i)->first);
+			normalizedTimeInbetween = b / a;
 			break;
 		}
 	}
 
-	interpolate = false;
+	// Find newest snapshot with information about player for smooth error correction when predicting player position
+	for (auto& latestUpdate : snapshots.front()->second)
+	{
+		if (FindObjectByID(latestUpdate.objectID) == playerControllersList.at(myClientID))
+		{
+			playerLatestUpdate = latestUpdate;
+			break;
+		}
+	}
+
 	if (interpolate)
 	{
 		// Interpolate
 		for (ServerUpdatePacket updatePacketPrev : *updatesPrev)
 		{
 			PhysicsObject* objectToUpdate = FindObjectByID(updatePacketPrev.objectID);
+			ServerUpdatePacket updatePacketNext;
+
+			// Find the same object in next snapshot
+			bool foundObjectInNextUpdate = false;
 			for (int i = 0; i < updatesNext->size(); ++i)
 			{
+				if (updatePacketPrev.objectID == updatesNext->at(i).objectID)
+				{
+					updatePacketNext = updatesNext->at(i);
+					foundObjectInNextUpdate = true;
+					break;
+				}
+			}
 
+			// Check if it's player controlled by this client
+			Player* p = dynamic_cast<Player*>(objectToUpdate);
+			if (p)
+			{
+				if (p->ownedByClient)
+				{
+					// check if difference in positions isnt to big and correct in that case, otherwise don't do anything
+					//b2Vec2 posFromServer = b2Vec2(ExpandToFloat(snapshots.front()->second.back().positionX), ExpandToFloat(snapshots.front()->second.back().positionY));
+					b2Vec2 posFromServer = b2Vec2(ExpandToFloat(playerLatestUpdate.positionX), ExpandToFloat(playerLatestUpdate.positionY));
+
+
+					if (Input::Instance().HorizontalInput() == 0 && Input::Instance().VerticalInput() == 0)
+					{
+						float diffX = p->GetPhysicsBody()->GetPosition().x - posFromServer.x;
+						float diffY = p->GetPhysicsBody()->GetPosition().y - posFromServer.y;
+						b2Vec2 dir = b2Vec2(diffX, diffY);
+						float dist = dir.Length();
+						float posX = p->GetPhysicsBody()->GetPosition().x - diffX;
+						float posY = p->GetPhysicsBody()->GetPosition().y - diffY;
+						if (dist < 10)
+						{
+							float speed = dist > 1 ? dist : 1;
+							dir.Normalize();
+							posX = p->GetPhysicsBody()->GetPosition().x - (dir.x *(NETWORK_TIMESTEP / 2) * speed);
+							posY = p->GetPhysicsBody()->GetPosition().y - (dir.y *(NETWORK_TIMESTEP / 2) * speed);
+						}
+
+						p->GetPhysicsBody()->SetTransform(b2Vec2(posX, posY), p->GetPhysicsBody()->GetAngle());
+					}
+
+					continue;
+				}
+			}
+
+			if (!foundObjectInNextUpdate)
+			{
+				// That object didn't move since previous update, just make sure it's on the right position
+				float posX = ExpandToFloat(updatePacketPrev.positionX);
+				float posY = ExpandToFloat(updatePacketPrev.positionY);
+				objectToUpdate->GetPhysicsBody()->SetTransform(b2Vec2(posX, posY), objectToUpdate->GetPhysicsBody()->GetAngle());
+			}
+			else
+			{
+				float posX = CosInterp(ExpandToFloat(updatePacketPrev.positionX), ExpandToFloat(updatePacketNext.positionX), normalizedTimeInbetween);
+				float posY = CosInterp(ExpandToFloat(updatePacketPrev.positionY), ExpandToFloat(updatePacketNext.positionY), normalizedTimeInbetween);
+				objectToUpdate->GetPhysicsBody()->SetTransform(b2Vec2(posX, posY), objectToUpdate->GetPhysicsBody()->GetAngle());
 			}
 		}
 	}
 	else
 	{
 		// Extrapolate
-		updatesPrev = &snapshots.front()->second;	// Update before last one
-		//updatesNext = &((*(snapshots.rbegin() + 1))->second);
+		updatesPrev = &snapshots.front()->second;	// Last received update
 
 		for (ServerUpdatePacket updatePacket : *updatesPrev)
 		{
 			PhysicsObject* objectToUpdate = FindObjectByID(updatePacket.objectID);
+
+			// Check if it's player controlled by this client, if so - don't interpolate
+			Player* p = dynamic_cast<Player*>(objectToUpdate);
+			if (p)
+			{
+				if (p->ownedByClient)
+					continue;
+			}
+
 			if (objectToUpdate)
 			{
-				float posX = ExpandToFloat(updatePacket.positionX);
-				float posY = ExpandToFloat(updatePacket.positionY);
+				float diffX = ExpandToFloat(updatePacket.positionX) - objectToUpdate->GetPhysicsBody()->GetPosition().x;
+				float diffY = ExpandToFloat(updatePacket.positionY) - objectToUpdate->GetPhysicsBody()->GetPosition().y;
+				float posX = objectToUpdate->GetPhysicsBody()->GetPosition().x + (diffX *(NETWORK_TIMESTEP / 2));
+				float posY = objectToUpdate->GetPhysicsBody()->GetPosition().y + (diffY *(NETWORK_TIMESTEP / 2));
 
 				switch (updatePacket.updateType)
 				{
@@ -1007,6 +1083,8 @@ void GameController::SimulateGame(float deltaTime)
 	for (auto &player : playerControllersList)
 	{
 		player->Update();
+		if (player->ownedByClient)
+			player->UpdateControl();	// Player prediction
 		player->UpdateAnimation();
 	}
 	wall->Update();
@@ -1057,7 +1135,6 @@ void GameController::SimulateGame(float deltaTime)
 
 void GameController::UpdateNetworking()
 {
-	networkingUpdates++;
 	if (myNetworkingType == NetworkingType::Client)
 	{
 		// Input commands

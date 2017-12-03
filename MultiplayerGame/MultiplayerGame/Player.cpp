@@ -29,10 +29,11 @@ Player::Player(b2World* physicsWorld, sf::Font* font, bool isDynamic, float posX
 	isHoldingObject = false;
 	throwPower = 1000;
 	attackCharge = 0;
-	canMove = false;
+	ownedByClient = false;
 	heldObject = nullptr;
 	owningClientID = -1;
 	tauntTextTimer = 0;
+	isOnServer = false;
 }
 
 
@@ -91,11 +92,22 @@ void Player::Update()
 
 void Player::UpdateControl()
 {
-	playerInput->Update();
+	Input* input = playerInput;
+
+	// For player prediction
+	if (ownedByClient)
+	{
+		input = &Input::Instance();
+	}
 
 	move();
 
-	if (playerInput->IsSpaceDown())
+	playerInput->Update();
+	
+	// Set back if used for prediction, so only movement is predicted
+	input = playerInput;
+
+	if (input->IsSpaceDown())
 	{
 		Player* enemyPlayer = getPlayerInRange();
 		if (enemyPlayer != nullptr)
@@ -114,7 +126,7 @@ void Player::UpdateControl()
 			}
 		}
 	}
-	else if (playerInput->IsSpaceReleased())
+	else if (input->IsSpaceReleased())
 	{
 		if (isHoldingObject)
 		{
@@ -122,7 +134,7 @@ void Player::UpdateControl()
 		}
 	}
 
-	if (playerInput->IsSpacePressed())
+	if (input->IsSpacePressed())
 	{
 		// Charge attack
 		attackCharge += Timer::Instance().GetDeltaTime();
@@ -137,15 +149,18 @@ void Player::UpdateAnimation()
 	b2Vec2 currentPos = physicsBody->GetPosition();
 
 	float newAngle = lastFrameRotation;
-	if (currentPos.x - lastFramePos.x > 0)
-		newAngle = 0;
-	else if (currentPos.x - lastFramePos.x < 0)
-		newAngle = 180;
-	else if (currentPos.y - lastFramePos.y < 0)
-		newAngle = 270;
-	else if (currentPos.y - lastFramePos.y > 0)
-		newAngle = 90;
 
+	if ((currentPos - lastFramePos).LengthSquared() > 0.1f || (ownedByClient && (currentPos - lastFramePos).LengthSquared() > 0.01f))
+	{
+		if (currentPos.x - lastFramePos.x > 0)
+			newAngle = 0;
+		else if (currentPos.x - lastFramePos.x < 0)
+			newAngle = 180;
+		else if (currentPos.y - lastFramePos.y < 0)
+			newAngle = 270;
+		else if (currentPos.y - lastFramePos.y > 0)
+			newAngle = 90;
+	}
 	if (lastFrameRotation != newAngle)
 	{
 		newAngle = newAngle / 180 * 3.14f;

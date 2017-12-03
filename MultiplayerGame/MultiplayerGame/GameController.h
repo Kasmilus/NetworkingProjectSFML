@@ -62,7 +62,7 @@ public:
 
 private:
 	// Networking - ideally a lot of that stuff should be in different class, now it's a bit messy
-	const float NETWORK_TIMESTEP = 1.0f / 15.0f;	// Rate at which information is exchanged between cleints and server. Simulation update rate is set in main.cpp
+	const float NETWORK_TIMESTEP = 1.0f / 30.0f;	// Rate at which information is exchanged between cleints and server. Simulation update rate is set in main.cpp
 	float networkUpdateTimer;
 	NetworkingType myNetworkingType;
 	ConnectionInfo_Client connectionInfoClient;	// Used if this instance is client
@@ -71,7 +71,6 @@ private:
 	// For server:
 	const float COMMAND_HISTORY_TIME = 0.6f;	// How long to keep history of player commands
 	std::vector<std::list<std::pair<float, std::vector<ClientActionCommand>>*>> clientCommandsHistory;	// Time and commands - Vector of players keeping list of pair entries (time, commands) with history of commands
-	int networkingUpdates;
 	// For client:
 	std::list<std::pair<float, std::vector<ServerUpdatePacket>>*> snapshots;	// Time and all object updates
 	const float CHAT_MESSAGE_INTERVAL = 1.5f;
@@ -81,7 +80,7 @@ private:
 	float clientServerClockDifference;
 	float lastSentMessageTime;
 	float roundTripTime;
-	const float interp = 0.1f;
+	const float interp = 0.05f;
 
 	// Physics
 	b2World* physicsWorld;

@@ -52,6 +52,7 @@ bool ConnectionInfo_Client::CheckIfDisconnected(sf::Socket::Status status)
 	if (status == sf::Socket::Status::Disconnected)
 	{
 		connectionStatus = ConnectionStatus::Disconnected;
+		MyClientSocketUDP.unbind();
 		LOG(WARNING) << "Server closed connection.";
 		return true;
 	}
@@ -77,7 +78,7 @@ bool ConnectionInfo_Client::SendPacketTCP(sf::Packet& packet, unsigned short rec
 bool ConnectionInfo_Client::SendPacketUDP(sf::Packet& packet, unsigned short receiverID)
 {
 	sf::Socket::Status status = MyClientSocketUDP.send(packet, serverIP, serverPort);
-	bool connectionBroken = CheckIfDisconnected(status);	// UDP doesn't have to be connected but if there's no TCP connection, server won't receive UDP either
+	bool connectionBroken = connectionStatus == ConnectionStatus::Disconnected;	// UDP doesn't have to be connected but if there's no TCP connection, server won't receive UDP either
 	if (connectionBroken)
 		return false;
 	bool error = CheckForError(status, "Client send packet (UDP) error.");

@@ -24,7 +24,6 @@ void ContactListener::BeginContact(b2Contact * contact)
 	{
 		if (!static_cast<PhysicsObject*>(bodyUserData)->IsServerObject())
 		{
-			LOG(INFO, INGAME) << "Client object, ignoring collision event";
 			return;
 		}
 	}
@@ -52,7 +51,6 @@ void ContactListener::EndContact(b2Contact * contact)
 	{
 		if (!static_cast<PhysicsObject*>(bodyUserData)->IsServerObject())
 		{
-			LOG(INFO, INGAME) << "Client object, ignoring collision event";
 			return;
 		}
 	}

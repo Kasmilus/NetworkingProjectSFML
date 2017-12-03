@@ -28,7 +28,7 @@ public:
 
 	void ShowTaunt();
 
-	bool canMove;
+	bool ownedByClient;
 	float tauntTextTimer;
 
 	// Text

@@ -9,6 +9,7 @@ ClientCommandInput::ClientCommandInput()
 	tauntButtonDown = false;
 	spacePressed = false;
 	spacePressedLastFrame = false;
+	UpdateInput(0, 0, false);
 }
 
 

@@ -30,6 +30,13 @@ void GameController::Init(sf::RenderWindow *window)
 
 	// Networking
 	connectionInfoServer.PassClientStatesPointer(&clientStates);
+	lastReceivedUpdateID = 0;
+	lastSentUpdateID = 0;
+	clientCurrentNetworkTimestep = CLIENT_NETWORK_TIMESTEP_GOOD;
+	timeSinceLastNetworkTimestepChange = 0;
+	gameState = GameState::WaitingToChooseNetworkingType;
+	networkUpdateTimerServer = 0;
+	networkUpdateTimerClient = 0;
 
 	// Text
 	font.loadFromFile("../resources/BebasNeue.otf");
@@ -81,8 +88,6 @@ void GameController::Init(sf::RenderWindow *window)
 	wall = nullptr;
 
 	isDebugDrawOn = false;
-	gameState = GameState::WaitingToChooseNetworkingType;
-	networkUpdateTimer = 0.0f;
 }
 
 void GameController::CleanUp()
@@ -121,12 +126,13 @@ void GameController::GenerateLevel()
 	numberOfSpawnedObjects = 0;
 	// Spawn players
 	int playerStartPos[4][2]{ {-30, 15}, {-30, 75}, {30, 15}, {30, 75} };
-	for (int i = 0; i < connectionInfoServer.GetConnectedClientsNumber(); ++i)	// later change 4 to number of connected players
+	for (int i = 0; i < connectionInfoServer.GetConnectedClientsNumber(); ++i)
 	{
 		Player* newPlayerController = new Player(physicsWorld, &font, true, playerStartPos[i][0], playerStartPos[i][1], 3, 3);
 		newPlayerController->SetID(numberOfSpawnedObjects);
 		newPlayerController->SetAsServerObject();
-		newPlayerController->SetOwningClient(i);
+		newPlayerController->SetOwningClient(sf::Uint8(i));
+		newPlayerController->SetNetworkingVariables(interp, clientStates.at(i)->GetRTT() / 2);
 		playerControllersList.push_back(newPlayerController);
 		numberOfSpawnedObjects++;
 	}
@@ -194,7 +200,7 @@ std::vector<ServerUpdatePacket> GameController::SpawnLevelForClient(sf::Packet p
 		bool isPlayer = updatePacket.boolField;
 		float posX = ExpandToFloat(updatePacket.positionX);
 		float posY = ExpandToFloat(updatePacket.positionY);
-		float size = updatePacket.size;
+		float size = ExpandToFloat(updatePacket.shortField);
 		if (updateType == ServerUpdateType::PlayerCharacter)
 		{
 			Player* newPlayerController = new Player(physicsWorld, &font, true, posX, posY, 3, 3);
@@ -242,8 +248,12 @@ void GameController::AssignTextures()
 	}
 }
 
+/*
+This function is not finished. unexpected things can happen when player kills another player.
+*/
 bool GameController::CheckWinningConditions()
 {
+
 	if (playerControllersList.size() == 1)
 	{
 		// Add point to that player
@@ -328,7 +338,7 @@ void GameController::HandleClientConnection()
 	ConnectionStatus status = connectionInfoClient.GetConnectionStatus();
 	switch (status) {
 	case ConnectionStatus::Disconnected:
-		// Client disconnected for some reason - go back to main screen
+		// Client disconnected for some reason - go back to main screen - state machine isn't implemented correctly, it can crash after that
 		gameState = GameState::WaitingToChooseNetworkingType;
 		break;
 	case ConnectionStatus::NoConnection:
@@ -414,7 +424,7 @@ void GameController::HandleServerConnection()
 			break;
 		case ConnectionStatus::NoConnection:
 			// This client was connected but isn't anymore
-			// Purpose of this class is to keep that information in case of reconnect but for now just throw it away, implement properly later!
+			// Purpose of this class is to keep that information in case of reconnect but for now just throw it away, remember to implement properly later!
 			LOG(WARNING) << "Removing disconnected player from the list!";
 			clientStates.erase(clientStates.begin() + id);
 			--id;
@@ -432,6 +442,7 @@ void GameController::HandleServerConnection()
 				{
 					// Decline connection
 					responsePacket = connectionInfoServer.CreateHandshakePacket(false);
+					connectionInfoServer.SendPacketTCP(responsePacket, id);
 					connectionInfoServer.CloseConnectionWithClient(id);
 					LOG(INFO) << "Max number of players connected, declining new connection attempt.";
 				}
@@ -443,6 +454,8 @@ void GameController::HandleServerConnection()
 					connectionInfoServer.SaveClientUDPAddress(id, handshakePacketInfo.clientPort);
 					clientStates.at(id)->SetConnected();
 					clientStates.at(id)->SetSimulationStartTime(handshakePacketInfo.timestamp);
+					clientServerClockDifference = Timer::Instance().GetSimulationTime() - (handshakePacketInfo.timestamp + (roundTripTime / 2));
+					clientStates.at(id)->SetRTT(clientServerClockDifference);
 					LOG(INFO) << "Player with ID " << id << " joined the server.";
 				}
 			}
@@ -452,6 +465,7 @@ void GameController::HandleServerConnection()
 			if (startTheGame)
 			{
 				// Tell clients that game starts now
+				serverSimulationStartTime = Timer::Instance().GetSimulationTime();
 				PackServerPacket(responsePacket, id, ServerGameStateCommand::StartGame);
 				connectionInfoServer.SendPacketTCP(responsePacket, id);
 				LOG(INFO) << "Game start message sent to player with ID " << id << ".";
@@ -473,7 +487,8 @@ void GameController::PackClientPacket(sf::Packet & packet)
 	clientPacket.timestamp = Timer::Instance().GetSimulationTime();
 
 	// Check for any ClientSimulationUpdate changes since last NetworkUpdate()
-	//..
+	clientPacket.updateID = lastSentUpdateID;
+	lastSentUpdateID++;
 	clientPacket.objectID = 0;	// Thats refering only to clientSimulationUpdate variable, not other commands as server will know where they come from
 	clientPacket.clientSimulationUpdate = ClientSimulationUpdate::Nothingg;	// isn't that waste of bandwith? Usually nothing will be sent.
 
@@ -502,7 +517,7 @@ void GameController::PackClientPacket(sf::Packet & packet)
 	}
 	clientPacket.numberOfCommands = commands.size();
 
-	// Pack all the information into the packet
+	// Pack all the data
 	packet << clientPacket;
 	for (int i = 0; i < commands.size(); ++i)
 	{
@@ -525,7 +540,9 @@ void GameController::UnpackClientPacket(sf::Packet & packet, sf::Uint8 clientID)
 		}
 	}
 
-	// Unpack the packet
+	lastReceivedUpdateID = clientPacket.updateID;
+
+	// Unpack the data
 	std::vector<ClientActionCommand> commands;
 	for (int i = 0; i < clientPacket.numberOfCommands; ++i)
 	{
@@ -550,6 +567,7 @@ void GameController::PackServerPacket(sf::Packet & packet, sf::Uint8 clientID, S
 {
 	ServerPacket serverPacket;
 	serverPacket.timestamp = Timer::Instance().GetSimulationTime();
+	serverPacket.lastReceivedUpdateID = lastReceivedUpdateID;
 	serverPacket.serverGameStateCommand = (sf::Uint8)message;
 
 	// Save data needed to be sent
@@ -577,9 +595,10 @@ void GameController::PackServerGameStateChanges(vector<ServerUpdatePacket>& upda
 	// Check what information exactly player needs and pack that
 	for (auto& crate : crateObjects)
 	{
-		// Don't send the object if it didn't move since last frame
-		if (!crate->MovedSinceLastFrame())
-			continue;
+		// Don't send the object if it didn't move since last frame(unless it's beginning of the game, just to make sure everything is synchronized on start)
+		// !!! This is commented out since interpolation is expecting each object to be in each snapshot, with better algorythm for picking game state snapshots this would work perfectly fine
+		//if (!crate->MovedSinceLastFrame() && serverSimulationStartTime > 2)
+		//	continue;
 
 		ServerUpdatePacket newUpdate;
 		newUpdate.objectID = crate->GetID();
@@ -593,6 +612,7 @@ void GameController::PackServerGameStateChanges(vector<ServerUpdatePacket>& upda
 			newUpdate.updateType = ServerUpdateType::Position;
 			newUpdate.positionX = CompactFloat(crate->GetPhysicsBody()->GetPosition().x);
 			newUpdate.positionY = CompactFloat(crate->GetPhysicsBody()->GetPosition().y);
+			newUpdate.shortField = CompactFloat(crate->GetPhysicsBody()->GetAngle());
 		}
 
 		updates.push_back(newUpdate);
@@ -600,13 +620,12 @@ void GameController::PackServerGameStateChanges(vector<ServerUpdatePacket>& upda
 
 	for (auto& player : playerControllersList)
 	{
-
-
 		ServerUpdatePacket newUpdate;
 		newUpdate.objectID = player->GetID();
 		newUpdate.updateType = ServerUpdateType::Position;
 		newUpdate.positionX = CompactFloat(player->GetPhysicsBody()->GetPosition().x);
 		newUpdate.positionY = CompactFloat(player->GetPhysicsBody()->GetPosition().y);
+		newUpdate.shortField = CompactFloat(player->GetPhysicsBody()->GetAngle());
 
 		if (player->IsMarkedForDestruction())
 		{
@@ -620,6 +639,7 @@ void GameController::PackServerGameStateChanges(vector<ServerUpdatePacket>& upda
 
 void GameController::PackServerGameStartData(vector<ServerUpdatePacket>& updates, sf::Uint8 clientID)
 {
+	// Crates
 	for (auto& crate : crateObjects)
 	{
 		ServerUpdatePacket newUpdate;
@@ -629,11 +649,11 @@ void GameController::PackServerGameStartData(vector<ServerUpdatePacket>& updates
 		newUpdate.positionX = CompactFloat(crate->GetPhysicsBody()->GetPosition().x);
 		newUpdate.positionY = CompactFloat(crate->GetPhysicsBody()->GetPosition().y);
 		newUpdate.boolField = false;
-		newUpdate.size = crate->GetSize();
+		newUpdate.shortField = CompactFloat(crate->GetSize());
 
 		updates.push_back(newUpdate);
 	}
-
+	// players
 	for (int i = 0; i < playerControllersList.size(); ++i)
 	{
 		Player* player = playerControllersList.at(i);
@@ -647,7 +667,7 @@ void GameController::PackServerGameStartData(vector<ServerUpdatePacket>& updates
 		newUpdate.positionX = CompactFloat(player->GetPhysicsBody()->GetPosition().x);
 		newUpdate.positionY = CompactFloat(player->GetPhysicsBody()->GetPosition().y);
 		newUpdate.boolField = true;
-		newUpdate.size = 0;	// Doesn't matter for a player
+		newUpdate.shortField = 0;	// Doesn't matter for a player
 
 		updates.push_back(newUpdate);
 	}
@@ -660,8 +680,8 @@ ServerGameStateCommand GameController::UnpackServerPacket(sf::Packet & packet)
 	packet >> serverPacket;
 	ServerGameStateCommand command = (ServerGameStateCommand)serverPacket.serverGameStateCommand;
 
-	roundTripTime = Timer::Instance().GetSimulationTime() - lastSentMessageTime;
-
+	roundTripTime = ((lastSentUpdateID - serverPacket.lastReceivedUpdateID)*clientCurrentNetworkTimestep);
+	
 	// Check if it's start game message, if it is - spawn all received objects
 	if (command == ServerGameStateCommand::StartGame)
 	{
@@ -682,12 +702,48 @@ ServerGameStateCommand GameController::UnpackServerPacket(sf::Packet & packet)
 			return ServerGameStateCommand::Nothing;
 		}
 
-		// Unpack the packet
+		// Unpack the data
+		bool isPacketValid = true;	// Check if someone injected values into the packet or if it arrived damaged
 		for (int i = 0; i < serverPacket.numberOfUpdates; ++i)
 		{
 			ServerUpdatePacket update;
 			packet >> update;
 			updates.push_back(update);
+			
+			PhysicsObject* obj = FindObjectByID(update.objectID);
+			if (!obj)
+				updates.pop_back();
+			if (obj)
+			{
+				b2Vec2 posDiff = b2Vec2(ExpandToFloat(update.positionX), ExpandToFloat(update.positionY)) - obj->GetPhysicsBody()->GetPosition();
+				if (posDiff.Length() > 25)
+				{
+					isPacketValid = false;
+				}
+			}
+		}
+
+		if (isPacketValid == false)
+		{
+
+			return (ServerGameStateCommand)command;
+		}
+	}
+
+	//Check for network congestion
+	if (timeSinceLastNetworkTimestepChange > 10)	// Dont allow changing timestep more often then once every 10 seconds
+	{
+		if (roundTripTime > 0.2f && clientCurrentNetworkTimestep == CLIENT_NETWORK_TIMESTEP_GOOD)	// if RTT is too big
+		{
+			clientCurrentNetworkTimestep = CLIENT_NETWORK_TIMESTEP_BAD;
+			timeSinceLastNetworkTimestepChange = 0;
+			LOG(INFO, NETWORK) << "Detected high latency, switching to lower network timestep. RTT: " << roundTripTime;
+		}
+		else if(roundTripTime < 0.2f && clientCurrentNetworkTimestep == CLIENT_NETWORK_TIMESTEP_BAD)
+		{
+			clientCurrentNetworkTimestep = CLIENT_NETWORK_TIMESTEP_GOOD;
+			timeSinceLastNetworkTimestepChange = 0;
+			LOG(INFO, NETWORK) << "Detected lower latency, switching back to higher network timestep. RTT: " << roundTripTime;
 		}
 	}
 
@@ -705,7 +761,7 @@ void GameController::PackChatPacketClient(sf::Packet & packet)
 	ChatMessagePacket chatMessage;
 	chatMessage.clientID = myClientID;
 	chatMessage.PlayerName = std::string("Player " + std::to_string(myClientID));
-	chatMessage.Message = std::string("ALL YOUR BASE ARE BELONG TO US");
+	chatMessage.Message = std::string("ALL YOUR BASE ARE BELONG TO US");	// Sending hardcoded message but could be typed by player as well(if only UI was there...)
 	packet << chatMessage;
 }
 
@@ -724,7 +780,9 @@ void GameController::UnpackChatPacket(sf::Packet & packet)
 bool GameController::Update(float deltaTime)
 {
 	Timer::Instance().Update(deltaTime);
-	networkUpdateTimer += deltaTime;
+	networkUpdateTimerServer += deltaTime;
+	networkUpdateTimerClient += deltaTime;
+	timeSinceLastNetworkTimestepChange += deltaTime;
 
 	if (isWindowInFocus)
 	{
@@ -761,6 +819,7 @@ bool GameController::Update(float deltaTime)
 		return true;
 		break;
 	case GameState::InGame:
+		// Server started the game - clients can't join
 		// Physics world
 		physicsWorld->Step(PHYSICS_TIMESTEP, VEL_ITERATIONS, POS_ITERATIONS);
 
@@ -821,11 +880,22 @@ bool GameController::Update(float deltaTime)
 			UpdateGame(deltaTime);
 		}
 
-		// Send update to client/server
-		if (networkUpdateTimer >= NETWORK_TIMESTEP)
+		// Send updates
+		if (myNetworkingType == NetworkingType::Server)
 		{
-			networkUpdateTimer = 0.0f;
-			UpdateNetworking();
+			if (networkUpdateTimerServer >= NETWORK_TIMESTEP)
+			{
+				networkUpdateTimerServer = 0.0f;
+				UpdateNetworkingServer();
+			}
+		}
+		else
+		{
+			if (networkUpdateTimerClient >= clientCurrentNetworkTimestep)
+			{
+				networkUpdateTimerClient = 0.0f;
+				UpdateNetworkingClient();
+			}
 		}
 		break;
 	case GameState::Finished:
@@ -833,12 +903,50 @@ bool GameController::Update(float deltaTime)
 		{
 			if (Input::Instance().IsSpacePressed())
 			{
-				//Restart the game
+				//Restart the game - not implemented
 			}
 		}
 		break;
 	}
 
+	// Destroy marked objects
+	if (crateObjects.size() > 0)
+	{
+		for (std::vector<CrateObject*>::iterator crate = crateObjects.begin(); crate != crateObjects.end(); )
+		{
+			(*crate)->Update();
+			if ((*crate)->IsMarkedForDestruction())
+			{
+				delete *crate;
+				crate = crateObjects.erase(crate);
+			}
+			else
+			{
+				++crate;
+			}
+		}
+	}
+	if (playerControllersList.size() > 1)
+	{
+		for (std::vector<Player*>::iterator player = playerControllersList.begin(); player != playerControllersList.end(); )
+		{
+			if ((*player)->IsMarkedForDestruction())
+			{
+				delete (*player);
+				player = playerControllersList.erase(player);
+
+				if (CheckWinningConditions())
+				{
+					break;
+				}
+			}
+			else
+			{
+				++player;
+			}
+
+		}
+	}
 
 	// Quitting game
 	if (Input::Instance().IsQuitPressed())
@@ -877,56 +985,18 @@ void GameController::UpdateGame(float deltaTime)
 		}
 	}
 
-	// Destroy marked objects
-	if (crateObjects.size() > 0)
-	{
-		for (std::vector<CrateObject*>::iterator crate = crateObjects.begin(); crate != crateObjects.end(); )
-		{
-			(*crate)->Update();
-			if ((*crate)->IsMarkedForDestruction())
-			{
-				delete *crate;
-				crate = crateObjects.erase(crate);
-			}
-			else
-			{
-				++crate;
-			}
-		}
-	}
-
-	if (playerControllersList.size() > 1)
-	{
-		for (std::vector<Player*>::iterator player = playerControllersList.begin(); player != playerControllersList.end(); )
-		{
-			if ((*player)->IsMarkedForDestruction())
-			{
-				delete (*player);
-				player = playerControllersList.erase(player);
-
-				if (CheckWinningConditions())
-				{
-					break;
-				}
-			}
-			else
-			{
-				++player;
-			}
-
-		}
-	}
-
-
 }
 
+/*
+Client side interpolation, extrapolation and smooth player prediction error fixing
+*/
 void GameController::SimulateGame(float deltaTime)
 {
 	std::vector<ServerUpdatePacket>* updatesPrev;
 	std::vector<ServerUpdatePacket>* updatesNext;
 	ServerUpdatePacket playerLatestUpdate;
 	float simulationTime = Timer::Instance().GetSimulationTime() - interp;
-	float normalizedTimeInbetween;	// at which point between those 2 values are we now?
+	float normalizedTimeInbetween;	// at which point between 2 chosen snapshots are we now?
 
 	// Remove snapshots older than 1 second
 	while (snapshots.size() > (1 / NETWORK_TIMESTEP))
@@ -998,7 +1068,6 @@ void GameController::SimulateGame(float deltaTime)
 				if (p->ownedByClient)
 				{
 					// check if difference in positions isnt to big and correct in that case, otherwise don't do anything
-					//b2Vec2 posFromServer = b2Vec2(ExpandToFloat(snapshots.front()->second.back().positionX), ExpandToFloat(snapshots.front()->second.back().positionY));
 					b2Vec2 posFromServer = b2Vec2(ExpandToFloat(playerLatestUpdate.positionX), ExpandToFloat(playerLatestUpdate.positionY));
 
 
@@ -1027,20 +1096,19 @@ void GameController::SimulateGame(float deltaTime)
 
 			if (!foundObjectInNextUpdate)
 			{
-				// That object didn't move since previous update, just make sure it's on the right position
-				float posX = ExpandToFloat(updatePacketPrev.positionX);
-				float posY = ExpandToFloat(updatePacketPrev.positionY);
-				objectToUpdate->GetPhysicsBody()->SetTransform(b2Vec2(posX, posY), objectToUpdate->GetPhysicsBody()->GetAngle());
+				interpolate = false;
 			}
 			else
 			{
 				float posX = CosInterp(ExpandToFloat(updatePacketPrev.positionX), ExpandToFloat(updatePacketNext.positionX), normalizedTimeInbetween);
 				float posY = CosInterp(ExpandToFloat(updatePacketPrev.positionY), ExpandToFloat(updatePacketNext.positionY), normalizedTimeInbetween);
-				objectToUpdate->GetPhysicsBody()->SetTransform(b2Vec2(posX, posY), objectToUpdate->GetPhysicsBody()->GetAngle());
+				float rot = Lerp(ExpandToFloat(updatePacketPrev.shortField), ExpandToFloat(updatePacketNext.shortField), normalizedTimeInbetween);
+				objectToUpdate->GetPhysicsBody()->SetTransform(b2Vec2(posX, posY), rot);
 			}
 		}
 	}
-	else
+
+	if (!interpolate)
 	{
 		// Extrapolate
 		updatesPrev = &snapshots.front()->second;	// Last received update
@@ -1048,8 +1116,10 @@ void GameController::SimulateGame(float deltaTime)
 		for (ServerUpdatePacket updatePacket : *updatesPrev)
 		{
 			PhysicsObject* objectToUpdate = FindObjectByID(updatePacket.objectID);
+			if (objectToUpdate == nullptr)
+				continue;
 
-			// Check if it's player controlled by this client, if so - don't interpolate
+			// Check if it's player controlled by this client, if so - don't extrapolate(because there's prediction working already)
 			Player* p = dynamic_cast<Player*>(objectToUpdate);
 			if (p)
 			{
@@ -1061,13 +1131,15 @@ void GameController::SimulateGame(float deltaTime)
 			{
 				float diffX = ExpandToFloat(updatePacket.positionX) - objectToUpdate->GetPhysicsBody()->GetPosition().x;
 				float diffY = ExpandToFloat(updatePacket.positionY) - objectToUpdate->GetPhysicsBody()->GetPosition().y;
-				float posX = objectToUpdate->GetPhysicsBody()->GetPosition().x + (diffX *(NETWORK_TIMESTEP / 2));
-				float posY = objectToUpdate->GetPhysicsBody()->GetPosition().y + (diffY *(NETWORK_TIMESTEP / 2));
+				float diffRot = ExpandToFloat(updatePacket.shortField) - objectToUpdate->GetPhysicsBody()->GetAngle();
+				float posX = objectToUpdate->GetPhysicsBody()->GetPosition().x + (diffX *(NETWORK_TIMESTEP / 100));
+				float posY = objectToUpdate->GetPhysicsBody()->GetPosition().y + (diffY *(NETWORK_TIMESTEP / 100));
+				float rot = objectToUpdate->GetPhysicsBody()->GetAngle() + (diffRot *(NETWORK_TIMESTEP / 2));
 
 				switch (updatePacket.updateType)
 				{
 				case ServerUpdateType::Position:
-					objectToUpdate->GetPhysicsBody()->SetTransform(b2Vec2(posX, posY), objectToUpdate->GetPhysicsBody()->GetAngle());
+					objectToUpdate->GetPhysicsBody()->SetTransform(b2Vec2(posX, posY), rot);
 					break;
 				case ServerUpdateType::Destroy:
 					objectToUpdate->Destroy();
@@ -1076,8 +1148,6 @@ void GameController::SimulateGame(float deltaTime)
 			}
 		}
 	}
-
-
 
 	// Update objects state
 	for (auto &player : playerControllersList)
@@ -1092,97 +1162,56 @@ void GameController::SimulateGame(float deltaTime)
 	{
 		wall->Update();
 	}
-	// Destroy marked objects
-	if (crateObjects.size() > 0)
-	{
-		for (std::vector<CrateObject*>::iterator crate = crateObjects.begin(); crate != crateObjects.end(); )
-		{
-			(*crate)->Update();
-			if ((*crate)->IsMarkedForDestruction())
-			{
-				delete *crate;
-				crate = crateObjects.erase(crate);
-			}
-			else
-			{
-				++crate;
-			}
-		}
-	}
-
-	if (playerControllersList.size() > 1)
-	{
-		for (std::vector<Player*>::iterator player = playerControllersList.begin(); player != playerControllersList.end(); )
-		{
-			if ((*player)->IsMarkedForDestruction())
-			{
-				delete (*player);
-				player = playerControllersList.erase(player);
-
-				if (CheckWinningConditions())
-				{
-					break;
-				}
-			}
-			else
-			{
-				++player;
-			}
-
-		}
-	}
 }
 
-void GameController::UpdateNetworking()
+void GameController::UpdateNetworkingClient()
 {
-	if (myNetworkingType == NetworkingType::Client)
+	// Input commands
+	sf::Packet clientPacket;
+	PackClientPacket(clientPacket);
+	bool result = connectionInfoClient.SendPacketUDP(clientPacket);
+
+	if (!result)
 	{
-		// Input commands
-		sf::Packet clientPacket;
-		PackClientPacket(clientPacket);
-		bool result = connectionInfoClient.SendPacketUDP(clientPacket);
+		LOG(WARNING, INGAME) << "Server closed connection. Going back to main menu.";
+		gameState = GameState::WaitingToChooseNetworkingType;
+	}
+	else
+	{
+		lastSentMessageTime = Timer::Instance().GetSimulationTime();
+	}
 
-		if (!result)
+	// Chat messages
+	if (chatMessageBlockTime <= 0)
+	{
+		if (Input::Instance().isKeyPressed(KeyName::taunt))
 		{
-			LOG(WARNING, INGAME) << "Server closed connection. Going back to main menu.";
-			gameState = GameState::WaitingToChooseNetworkingType;
-		}
-		else
-		{
-			lastSentMessageTime = Timer::Instance().GetSimulationTime();
-		}
-
-		// Chat messages
-		if (chatMessageBlockTime <= 0)
-		{
-			if (Input::Instance().isKeyPressed(KeyName::taunt))
-			{
-				sf::Packet clientPacket;
-				PackChatPacketClient(clientPacket);
-				connectionInfoClient.SendPacketTCP(clientPacket);
-				chatMessageBlockTime = CHAT_MESSAGE_INTERVAL;
-			}
-		}
-		else
-		{
-			chatMessageBlockTime -= Timer::Instance().GetDeltaTime()*(NETWORK_TIMESTEP / PHYSICS_TIMESTEP);
-
+			sf::Packet clientPacket;
+			PackChatPacketClient(clientPacket);
+			connectionInfoClient.SendPacketTCP(clientPacket);
+			chatMessageBlockTime = CHAT_MESSAGE_INTERVAL;
 		}
 	}
 	else
 	{
-		for (int id = 0; id < playerControllersList.size(); ++id)
+		chatMessageBlockTime -= Timer::Instance().GetDeltaTime()*(NETWORK_TIMESTEP / PHYSICS_TIMESTEP);
+
+	}
+}
+
+void GameController::UpdateNetworkingServer()
+{
+	for (int id = 0; id < playerControllersList.size(); ++id)
+	{
+		// Game state
+		sf::Packet serverPacket;
+		PackServerPacket(serverPacket, id, ServerGameStateCommand::Nothing);
+		bool result = connectionInfoServer.SendPacketUDP(serverPacket, id);
+		if (!result)
 		{
-			// Game state
-			sf::Packet serverPacket;
-			PackServerPacket(serverPacket, id, ServerGameStateCommand::Nothing);
-			bool result = connectionInfoServer.SendPacketUDP(serverPacket, id);
-			if (!result)
-			{
-				LOG(WARNING, INGAME) << "Player disconnected. Destroying player controller.";
-				delete playerControllersList.at(id);
-				playerControllersList.erase(playerControllersList.begin() + id);
-			}
+			LOG(WARNING, INGAME) << "Player disconnected. Destroying player controller.";
+			delete playerControllersList.at(id);
+			playerControllersList.erase(playerControllersList.begin() + id);
 		}
 	}
 }
@@ -1205,11 +1234,14 @@ void GameController::Render()
 		window->draw(*wall->GetSprite());
 	}
 
-	// Text
+	// Score
 	for (int i = 0; i < playerControllersList.size(); ++i)
 	{
 		window->draw(playerNameText[i]);
-		playerScoreText->setString(std::to_string(0));	// later get score from player objects
+		int points = 0;
+		if (clientStates.size() > i)
+			points = clientStates.at(i)->GetPoints();
+		playerScoreText->setString(std::to_string(points));
 		window->draw(playerScoreText[i]);
 
 		window->draw(playerControllersList[i]->tauntText);

@@ -33,7 +33,8 @@ private:
 	void UpdateGame(float deltaTime);
 	// Simulate - client
 	void SimulateGame(float deltaTime);
-	void UpdateNetworking();
+	void UpdateNetworkingServer();
+	void UpdateNetworkingClient();
 
 	// Gameplay
 	void GenerateLevel();	// Randomly generates objects and players
@@ -61,15 +62,17 @@ public:
 	bool isWindowInFocus;
 
 private:
-	// Networking - ideally a lot of that stuff should be in different class, now it's a bit messy
-	const float NETWORK_TIMESTEP = 1.0f / 30.0f;	// Rate at which information is exchanged between cleints and server. Simulation update rate is set in main.cpp
-	float networkUpdateTimer;
+	// Networking - ideally a lot of that stuff would be in different classes, now it's really messy
+	const float NETWORK_TIMESTEP = 1.0f / 30.0f;	// Rate at which information is exchanged between clients and server. Simulation update rate is set in main.cpp
+	float networkUpdateTimerServer;
+	float networkUpdateTimerClient;
 	NetworkingType myNetworkingType;
 	ConnectionInfo_Client connectionInfoClient;	// Used if this instance is client
 	ConnectionInfo_Server connectionInfoServer;	// used if this instance is server
 	std::vector<ClientState*> clientStates;	// Connected players game info
 	// For server:
 	const float COMMAND_HISTORY_TIME = 0.6f;	// How long to keep history of player commands
+	sf::Int32 lastReceivedUpdateID;
 	std::vector<std::list<std::pair<float, std::vector<ClientActionCommand>>*>> clientCommandsHistory;	// Time and commands - Vector of players keeping list of pair entries (time, commands) with history of commands
 	// For client:
 	std::list<std::pair<float, std::vector<ServerUpdatePacket>>*> snapshots;	// Time and all object updates
@@ -80,12 +83,18 @@ private:
 	float clientServerClockDifference;
 	float lastSentMessageTime;
 	float roundTripTime;
-	const float interp = 0.05f;
+	const float interp = 0.1f;
+	sf::Int32 lastSentUpdateID;
+	bool areNetworkConditionsGood;
+	const float CLIENT_NETWORK_TIMESTEP_GOOD = 1.0f / 30.0f;	// Rate to use when server is receiving updates within reasonable time limit
+	const float CLIENT_NETWORK_TIMESTEP_BAD = 1.0f / 10.0f;	// Rate to use when server isn't getting updates often enough(when we are flooding connection)
+	float clientCurrentNetworkTimestep;	// may be lower or higher depending on netwokr conditions
+	float timeSinceLastNetworkTimestepChange;
 
 	// Physics
 	b2World* physicsWorld;
 	ContactListener* contactListener;
-	SFMLDebugDraw* debugDraw;	// debug drawing
+	SFMLDebugDraw* debugDraw;
 	const float PHYSICS_TIMESTEP = 1.0f / 60.0f;
 	const int VEL_ITERATIONS = 8;
 	const int POS_ITERATIONS = 3;

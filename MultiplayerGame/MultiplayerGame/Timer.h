@@ -13,8 +13,8 @@ public:
 
 private:
 	Timer() {}
-	Timer(Timer const&);              // Don't Implement.
-	void operator=(Timer const&); // Don't implement
+	Timer(Timer const&);         
+	void operator=(Timer const&);
 
 	float timeSinceStart = 0.0f;
 	float deltaTime;

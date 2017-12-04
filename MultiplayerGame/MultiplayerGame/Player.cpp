@@ -106,15 +106,16 @@ void Player::UpdateControl()
 	
 	// Set back if used for prediction, so only movement is predicted
 	input = playerInput;
-
+	getPlayerInRange();
 	if (input->IsSpaceDown())
 	{
-		Player* enemyPlayer = getPlayerInRange();
+		//Player* enemyPlayer = getPlayerInRange();
+		Player* enemyPlayer = getPlayerInRangeWithLagCompensation();
 		if (enemyPlayer != nullptr)
 		{
 			punchPlayer(enemyPlayer);
 		}
-		if (enemyPlayer == nullptr)
+		/*if (enemyPlayer == nullptr)
 		{
 			if (!isHoldingObject)
 			{
@@ -124,23 +125,24 @@ void Player::UpdateControl()
 					pickUpObject(objectToPickUp);
 				}
 			}
-		}
+		}*/
 	}
 	else if (input->IsSpaceReleased())
 	{
 		if (isHoldingObject)
 		{
-			throwObject();
+			//throwObject();
 		}
 	}
 
 	if (input->IsSpacePressed())
 	{
 		// Charge attack
-		attackCharge += Timer::Instance().GetDeltaTime();
+		// attaching physic bodies to one another works terribly bad even without networking, adding interpolation on top of that only makes those bugs appear worse
+		/*attackCharge += Timer::Instance().GetDeltaTime();
 
 		if (attackCharge > 3)
-			attackCharge = 3;
+			attackCharge = 3;*/
 	}
 }
 
@@ -150,7 +152,7 @@ void Player::UpdateAnimation()
 
 	float newAngle = lastFrameRotation;
 
-	if ((currentPos - lastFramePos).LengthSquared() > 0.1f || (ownedByClient && (currentPos - lastFramePos).LengthSquared() > 0.01f))
+	if ((currentPos - lastFramePos).Length() > 0.1f || (ownedByClient && (currentPos - lastFramePos).Length() > 0.06f))
 	{
 		if (currentPos.x - lastFramePos.x > 0)
 			newAngle = 0;
@@ -261,12 +263,13 @@ void Player::EndCollision(b2Fixture* coll, bool isTrigger)
 
 void Player::move()
 {
+	float speed = 10.0f;
+
 	//Set input source(different for server/client)
 	Input* input = &Input::Instance();
 	if (isOnServer)
 		input = playerInput;
 
-	float speed = 10.0f;
 	float horInput = input->HorizontalInput();
 	if (horInput != 0)
 		horInput = horInput > 0 ? 1 : -1;
@@ -313,7 +316,7 @@ void Player::punchPlayer(Player* enemyPlayer)
 PhysicsObject* Player::getObjectInRange()
 {
 	PhysicsObject* objectToReturn = nullptr;
-	float dist = 1000;	// Just a random large value which will be larger than any possible player catch range
+	float dist = 1000;
 	for each (PhysicsObject* obj in objectsInRange)
 	{
 		if (obj && obj->GetPhysicsBody())
@@ -347,5 +350,37 @@ Player* Player::getPlayerInRange()
 		}
 	}
 
+	playerInRangeHistory.push_front(std::pair<float, Player*>(Timer::Instance().GetSimulationTime(), playerToReturn));
+	// Remove snapshots older than 1 second
+	while (playerInRangeHistory.size() > 30)
+	{
+		playerInRangeHistory.pop_back();
+	}
+
 	return playerToReturn;
+}
+
+Player * Player::getPlayerInRangeWithLagCompensation()
+{
+	// Iterate backwards until you find snapshot closest to (currentTime-interp)
+	bool interpolate = false;
+	for (std::list<std::pair<float, Player*>>::iterator i = playerInRangeHistory.begin(); i != playerInRangeHistory.end(); ++i)
+	{
+		std::pair<float, Player*> snapshot = (*i);
+
+		if ((Timer::Instance().GetSimulationTime() - currentInterp) > snapshot.first - clientServerClockDifference)
+		{
+			++i;
+
+			if (i == playerInRangeHistory.end())
+			{
+				--i;
+				return snapshot.second;
+			}
+			return snapshot.second;
+		}
+	}
+
+	// nothing was found so just use most rcent one
+	return playerInRangeHistory.front().second;
 }

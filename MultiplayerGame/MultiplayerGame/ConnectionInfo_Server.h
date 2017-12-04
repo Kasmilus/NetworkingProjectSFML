@@ -23,7 +23,6 @@ public:
 	bool CheckIfClientDisconnected(sf::Socket::Status status, unsigned short clientID);
 	void SaveClientUDPAddress(unsigned short clientID, sf::Uint16 port);
 
-	// These functions are mean't to be overridden by server and player
 	// ReceiverID - ID of the client who should receive the packet. Not relevant for client class(always sends to server)
 	virtual bool SendPacketTCP(sf::Packet& packet, unsigned short receiverID) override;
 	virtual bool SendPacketUDP(sf::Packet& packet, unsigned short receiverID) override;

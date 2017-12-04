@@ -2,7 +2,7 @@
 #include "ConnectionInfo.h"
 
 /*
-Class containing all info player needs
+Class containing all info client needs to handle packets exchange with server
 */
 
 class ConnectionInfo_Client :
@@ -17,7 +17,6 @@ public:
 	bool CheckIfDisconnected(sf::Socket::Status status);
 	sf::Uint8 GetUDPPort() { return MyClientSocketUDP.getLocalPort(); }
 
-	// These functions are mean't to be overridden by server and player
 	// ReceiverID - ID of the client who should receive the packet. Not relevant for client class(always sends to server)
 	virtual bool SendPacketTCP(sf::Packet &packet, unsigned short receiverID = 0) override;
 	virtual bool SendPacketUDP(sf::Packet &packet, unsigned short receiverID = 0) override;

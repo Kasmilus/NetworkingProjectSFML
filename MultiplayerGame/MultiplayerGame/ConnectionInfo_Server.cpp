@@ -117,7 +117,7 @@ bool ConnectionInfo_Server::SendPacketTCP(sf::Packet& packet, unsigned short rec
 	}
 	else if (receiverID < 0)
 	{
-		LOG(ERROR) << "Client ID can't be negati! (invalid receiverID: " << receiverID << ").";
+		LOG(ERROR) << "Client ID can't be negative! (invalid receiverID: " << receiverID << ").";
 		return false;
 	}
 

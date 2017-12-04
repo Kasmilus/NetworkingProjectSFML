@@ -24,7 +24,7 @@ bool ConnectionInfo::CheckForError(sf::Socket::Status & status, std::string erro
 
 			if (status == sf::Socket::Partial)
 			{
-				LOG(ERROR) << " - Sent only part of the packet, needs resend.";
+				LOG(ERROR) << " - Sent only part of the packet, needs to be resend.";
 			}
 			return true;
 		}

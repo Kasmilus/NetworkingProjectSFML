@@ -27,7 +27,6 @@ int main()
 	{
 		
 		sf::Event event;
-		//view.move(1, 1);
 		sf::Time deltaTime = clockDeltaTime.restart();
 		// Update game logic
 		bool run = game.Update(deltaTime.asSeconds());

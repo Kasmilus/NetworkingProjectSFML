@@ -25,8 +25,8 @@ public:
 
 protected:
 	Input() {}
-	Input(Input const&);              // Don't Implement.
-	void operator=(Input const&); // Don't implement
+	Input(Input const&);             
+	void operator=(Input const&);
 
 	// Control hor/vert input
 	const float SENSITIVITY = 0.4f;

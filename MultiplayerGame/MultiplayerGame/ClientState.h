@@ -22,6 +22,8 @@ public:
 	inline void SetDisconnected() { connectionStatus = ConnectionStatus::NoConnection; }
 	inline void SetSimulationStartTime(float t) { simulationStartTime = t; }
 	inline float GetSimulationStartTime() { return simulationStartTime; }
+	inline void SetRTT(float value) { lastRoundTripTime = value; }
+	inline float GetRTT() { return lastRoundTripTime; }
 
 	// Game related info
 	inline void AddPoint() { points++; }

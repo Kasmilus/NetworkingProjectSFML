@@ -3,9 +3,7 @@
 
 
 PhysicsObject::PhysicsObject()
-{
-	// Should never be called, for some reason compiler doesn't like it not having empty constructor(because of static_cast in ContactListener?)
-}
+{}
 
 PhysicsObject::PhysicsObject(b2World* physicsWorld, bool isDynamic, float posX, float posY, float sizeX, float sizeY)
 {
